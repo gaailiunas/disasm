@@ -40,6 +40,7 @@ void disasm(const uint8_t *instructions, size_t len)
                 modrm_extract(instructions[i + 1], &mod);
 
                 bool x64 = false;
+                bool rexb = false;
 
                 if (i > 0) {
                     struct rex_prefix rex;
@@ -52,6 +53,7 @@ void disasm(const uint8_t *instructions, size_t len)
                             mod.rm += 8;
                         }
                         x64 = rex.w;
+                        rexb = rex.b;
                     }
                 }
 
@@ -66,7 +68,23 @@ void disasm(const uint8_t *instructions, size_t len)
                     printf("mov %s, %s\n", src_name, dst_name);
                 }
                 else {
-                    printf("mov with memory operand is not yet implemented\n");
+                    // register-indirect addressing mode is used
+                    if (mod.mod == 0) {
+                        if ((mod.rm >= 0 && mod.rm <= 3) || mod.rm == 6 || mod.rm == 7) {
+                            uint8_t src_reg = mod.rm;
+                            uint8_t dst_reg = mod.reg;
+
+                            printf("mov [%s], %s\n", reg_names_x64[src_reg], reg_names_x64[dst_reg]);
+                        }
+                        // TODO: handle disp8/32 and SIB
+                    }
+                    else if (mod.mod == 1) {
+                    }
+                    else if (mod.mod == 2) {
+                    }
+
+
+
                 }
 
                 i += 1;
