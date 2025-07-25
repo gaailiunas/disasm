@@ -16,6 +16,6 @@ struct rex_prefix {
     bool b;
 };
 
-bool rex_extract(uint8_t prefix, struct rex_prefix *rex);
+bool rex_extract(uint8_t prefix, struct rex_prefix *out);
 
 #endif // PREFIX_H

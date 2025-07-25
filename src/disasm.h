@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-enum disasm_register {
+enum disasm_register_x64 {
     REG_RAX,
     REG_RCX,
     REG_RDX,
@@ -23,7 +23,7 @@ enum disasm_register {
     REG_R15,
 };
 
-static const char *reg_names[] = {
+static const char *reg_names_x64[] = {
     "rax",
     "rcx",
     "rdx",
@@ -41,6 +41,29 @@ static const char *reg_names[] = {
     "r14",
     "r15" 
 };
+
+enum disasm_register_x86 {
+    REG_EAX,
+    REG_ECX,
+    REG_EDX,
+    REG_EBX,
+    REG_ESP,
+    REG_EBP,
+    REG_ESI,
+    REG_EDI,
+};
+
+static const char *reg_names_x86[] = {
+    "eax",
+    "ecx",
+    "edx",
+    "ebx",
+    "esp",
+    "ebp",
+    "esi",
+    "edi"
+};
+
 
 // TODO: impl a linked list for storing all asm 
 void disasm(const uint8_t *instructions, size_t len);

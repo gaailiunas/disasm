@@ -4,4 +4,5 @@ add_executable(disasm
     src/main.c
     src/disasm.c
     src/prefix.c
+    src/modrm.c
 )

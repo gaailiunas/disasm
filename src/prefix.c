@@ -1,6 +1,6 @@
 #include "prefix.h"
 
-bool rex_extract(uint8_t prefix, struct rex_prefix *rex)
+bool rex_extract(uint8_t prefix, struct rex_prefix *out)
 {
     unsigned char fixed = prefix >> 4;
 
@@ -9,9 +9,9 @@ bool rex_extract(uint8_t prefix, struct rex_prefix *rex)
         return false;
     }
 
-    rex->b = prefix & 0x1;
-    rex->x = (prefix >> 1) & 0x1;
-    rex->r = (prefix >> 2) & 0x1;
-    rex->w = (prefix >> 3) & 0x1;
+    out->b = prefix & 0x1;
+    out->x = (prefix >> 1) & 0x1;
+    out->r = (prefix >> 2) & 0x1;
+    out->w = (prefix >> 3) & 0x1;
     return true;
 }
