@@ -3,4 +3,5 @@ project(disasm)
 add_executable(disasm
     src/main.c
     src/disasm.c
+    src/prefix.c
 )
