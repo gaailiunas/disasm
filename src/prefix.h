@@ -9,6 +9,8 @@
  * 0x66, 0xF2 or 0xF3
  */
 
+#define PREFIX_ADDR_SIZE_OVERRIDE 0x67
+
 struct rex_prefix {
     bool w;
     bool r;

@@ -45,10 +45,12 @@ void disasm(const uint8_t *instructions, size_t len)
 
                 bool rex_present = false;
                 bool x64 = false;
+                bool addrsize_override = false;
 
                 if (i > 0) {
                     struct rex_prefix rex;
                     uint8_t prefix = instructions[i - 1]; 
+
                     if (rex_extract(prefix, &rex)) {
                         if (rex.r) {
                             mod.reg += 8;
@@ -58,6 +60,10 @@ void disasm(const uint8_t *instructions, size_t len)
                         }
                         rex_present = true;
                         x64 = rex.w;
+                    }
+
+                    if (i > 1 && instructions[i - 2] == PREFIX_ADDR_SIZE_OVERRIDE) {
+                        addrsize_override = true;
                     }
                 }
 
@@ -107,14 +113,17 @@ void disasm(const uint8_t *instructions, size_t len)
                             uint32_t disp;
                             memcpy(&disp, &instructions[i + 2], 4);
 
-                            // 3 + 4 (+1, rex prefix?)
-                            uint32_t offset = rex_present ? 7 : 6;
+                            uint32_t offset = 6;
+                            if (addrsize_override)
+                                offset++;
+                            if (rex_present)
+                                offset++;
                             offset += disp;
                             
-
-                            // this seems wrong since we need to handle 0x67 prefix for eip (address size override prefix)
-                            const char *reg = x64 ? "rip" : "eip";
+                            const char *reg = addrsize_override ? "eip" : "rip";
                             printf("mov [%s+0x%x], %s # %x\n", reg, disp, reg_names_x64[mod.reg], offset);
+                            i += 6;
+                            continue;
                         }
                     }
                     else if (mod.mod == 1) {
