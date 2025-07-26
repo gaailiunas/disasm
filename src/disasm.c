@@ -2,6 +2,7 @@
 #include "modrm.h"
 #include "prefix.h"
 #include "sib.h"
+#include <string.h>
 #include <stdio.h>
 
 void disasm(const uint8_t *instructions, size_t len)
@@ -42,6 +43,7 @@ void disasm(const uint8_t *instructions, size_t len)
 
                 printf("mod rm: %d\n", mod.rm);
 
+                bool rex_present = false;
                 bool x64 = false;
 
                 if (i > 0) {
@@ -54,6 +56,7 @@ void disasm(const uint8_t *instructions, size_t len)
                         if (rex.b) {
                             mod.rm += 8;
                         }
+                        rex_present = true;
                         x64 = rex.w;
                     }
                 }
@@ -97,6 +100,21 @@ void disasm(const uint8_t *instructions, size_t len)
 
                             i += 2;
                             continue;
+                        }
+
+                        // handle [RIP/EIP + disp32]
+                        if (mod.rm == 5) {
+                            uint32_t disp;
+                            memcpy(&disp, &instructions[i + 2], 4);
+
+                            // 3 + 4 (+1, rex prefix?)
+                            uint32_t offset = rex_present ? 7 : 6;
+                            offset += disp;
+                            
+
+                            // this seems wrong since we need to handle 0x67 prefix for eip (address size override prefix)
+                            const char *reg = x64 ? "rip" : "eip";
+                            printf("mov [%s+0x%x], %s # %x\n", reg, disp, reg_names_x64[mod.reg], offset);
                         }
                     }
                     else if (mod.mod == 1) {
