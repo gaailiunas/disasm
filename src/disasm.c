@@ -1,6 +1,7 @@
 #include "disasm.h"
 #include "modrm.h"
 #include "prefix.h"
+#include "sib.h"
 #include <stdio.h>
 
 void disasm(const uint8_t *instructions, size_t len)
@@ -39,8 +40,9 @@ void disasm(const uint8_t *instructions, size_t len)
                 struct modrm mod;
                 modrm_extract(instructions[i + 1], &mod);
 
+                printf("mod rm: %d\n", mod.rm);
+
                 bool x64 = false;
-                bool rexb = false;
 
                 if (i > 0) {
                     struct rex_prefix rex;
@@ -53,7 +55,6 @@ void disasm(const uint8_t *instructions, size_t len)
                             mod.rm += 8;
                         }
                         x64 = rex.w;
-                        rexb = rex.b;
                     }
                 }
 
@@ -65,29 +66,45 @@ void disasm(const uint8_t *instructions, size_t len)
                     const char *src_name = x64 ? reg_names_x64[src_reg] : reg_names_x86[src_reg];
                     const char *dst_name = x64 ? reg_names_x64[dst_reg] : reg_names_x86[dst_reg];
 
-                    printf("mov %s, %s\n", src_name, dst_name);
+                    printf("mov %s, %s\n", dst_name, src_name);
+                    i += 1;
+                    continue;
                 }
                 else {
                     // register-indirect addressing mode is used
                     if (mod.mod == 0) {
                         if ((mod.rm >= 0 && mod.rm <= 3) || mod.rm == 6 || mod.rm == 7) {
-                            uint8_t src_reg = mod.rm;
-                            uint8_t dst_reg = mod.reg;
+                            uint8_t src_reg = mod.reg;
+                            uint8_t dst_reg = mod.rm;
 
-                            printf("mov [%s], %s\n", reg_names_x64[src_reg], reg_names_x64[dst_reg]);
+                            printf("mov [%s], %s\n", reg_names_x64[dst_reg], reg_names_x64[src_reg]);
+                            i += 1;
+                            continue;
                         }
-                        // TODO: handle disp8/32 and SIB
+
+                        // handle SIB
+                        if (mod.rm == 4) {
+                            printf("here\n");
+                            if (i + 2 >= len) {
+                                printf("no sib byte\n");
+                                return;
+                            }
+                         
+                            struct sib s;
+                            sib_extract(instructions[i + 2], &s);
+
+                            printf("mov [%s+%s*%d], %s\n", reg_names_x64[s.base], reg_names_x64[s.index], s.factor, reg_names_x64[mod.reg]);
+
+                            i += 2;
+                            continue;
+                        }
                     }
                     else if (mod.mod == 1) {
                     }
                     else if (mod.mod == 2) {
                     }
-
-
-
                 }
 
-                i += 1;
                 break;
             }
         }
