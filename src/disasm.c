@@ -5,135 +5,322 @@
 #include <string.h>
 #include <stdio.h>
 
+const char *reg_names_64[] = {
+    "rax",
+    "rcx",
+    "rdx",
+    "rbx",
+    "rsp",
+    "rbp",
+    "rsi",
+    "rdi",
+    "r8", 
+    "r9", 
+    "r10",
+    "r11",
+    "r12",
+    "r13",
+    "r14",
+    "r15" 
+};
+
+const char *reg_names_32[] = {
+    "eax",
+    "ecx",
+    "edx",
+    "ebx",
+    "esp",
+    "ebp",
+    "esi",
+    "edi"
+};
+
+const char *reg_names_16[] = {
+    "ax",
+    "cx",
+    "dx",
+    "bx",
+    "sp",
+    "bp",
+    "si",
+    "di"
+};
+
+const uint8_t instruction_types[256] = {
+    [0x50] = INSTR_PUSH_REG,
+    [0x51] = INSTR_PUSH_REG,
+    [0x52] = INSTR_PUSH_REG,
+    [0x53] = INSTR_PUSH_REG,
+    [0x54] = INSTR_PUSH_REG,
+    [0x55] = INSTR_PUSH_REG,
+    [0x56] = INSTR_PUSH_REG,
+    [0x57] = INSTR_PUSH_REG,
+    [0x89] = INSTR_MOV_RM_R,
+};
+
+const char *get_reg_name(uint8_t reg, size_t arch)
+{
+    switch (arch) {
+        case 16:
+            return reg_names_16[reg];
+        case 32:
+            return reg_names_32[reg];
+        case 64:
+            return reg_names_64[reg];
+        default:
+            return reg_names_32[reg];
+    }
+}
+
+void disasm_parse_prefixes(disasm_ctx_t *ctx)
+{
+    while (ctx->current < ctx->end) {
+        uint8_t byte = *ctx->current;
+    
+        switch (byte) {
+            case 0x40 ... 0x4f: { // REX
+                if (rex_extract(byte, &ctx->rex)) {
+                    ctx->has_rex = true;
+                    ctx->current++;
+                    continue;
+                }
+                return;
+            }
+            case PREFIX_REPNE: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_REPNE);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_REP_REPE: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_REP_REPE);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_LOCK: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_LOCK);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_0x2e: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_0x2e);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_SEG_SS: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_SS);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_0x3e: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_0x3e);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_SEG_ES: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_ES);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_SEG_FS: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_FS);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_SEG_GS: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_GS);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_OP_SIZE_OVERRIDE: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_OP);
+                ctx->current++;
+                continue;
+            }
+            case PREFIX_ADDR_SIZE_OVERRIDE: {
+                SET_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE);
+                ctx->current++;
+                continue;
+            }
+            default:
+                return;
+        }
+    }
+}
+
+static inline void reset_ctx(disasm_ctx_t *ctx)
+{
+    ctx->has_rex = false;
+    ctx->prefixes = 0;
+}
+
+// returns a number of bytes consumed
+static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
+{
+    size_t consumed = 0;
+    
+    if (mod->mod == 0) {
+        if ((mod->rm >= 0 && mod->rm <= 3) || mod->rm == 6 || mod->rm == 7) {
+            uint8_t src = mod->reg;
+            uint8_t dst = mod->rm;
+
+            const char *src_reg;
+            const char *dst_reg;
+
+            if (ctx->has_rex && ctx->rex.w) {
+                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
+                    dst_reg = get_reg_name(dst, 32);
+                    src_reg = get_reg_name(src, 64);
+                }
+                else {
+                    dst_reg = get_reg_name(dst, 64);
+                    src_reg = get_reg_name(src, 64);
+                }
+            }
+            else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
+                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
+                    dst_reg = get_reg_name(dst, 32);
+                    src_reg = get_reg_name(src, 16);
+                }
+                else {
+                    dst_reg = get_reg_name(dst, 64);
+                    src_reg = get_reg_name(src, 16);
+                }
+            }
+            else {
+                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
+                    dst_reg = get_reg_name(dst, 32);
+                    src_reg = get_reg_name(src, 32);
+                }
+                else {
+                    dst_reg = get_reg_name(dst, 64);
+                    src_reg = get_reg_name(src, 32);
+                }
+            }
+
+            printf("mov [%s], %s\n", dst_reg, src_reg);
+        }
+        if (mod->rm == 4) {
+            if (!check_bounds(ctx, 1)) {
+                printf("no sib byte\n");
+                return consumed;
+            }
+
+            struct sib s;
+            sib_extract(*ctx->current, &s);
+            consumed++;
+
+            const char *src_reg;
+            const char *dst_reg0;
+            const char *dst_reg1;
+
+            if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
+                if (ctx->has_rex && ctx->rex.w) {
+                    dst_reg0 = get_reg_name(s.base, 32);
+                    dst_reg1 = get_reg_name(s.index, 32);
+                    src_reg = get_reg_name(mod->reg, 64);
+                }
+                else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
+                    dst_reg0 = get_reg_name(s.base, 32);
+                    dst_reg1 = get_reg_name(s.index, 32);
+                    src_reg = get_reg_name(mod->reg, 16);
+                }
+                else {
+                    dst_reg0 = get_reg_name(s.base, 32);
+                    dst_reg1 = get_reg_name(s.index, 32);
+                    src_reg = get_reg_name(mod->reg, 32);
+                }
+            }
+            else if (ctx->has_rex && ctx->rex.w) {
+                dst_reg0 = get_reg_name(s.base, 64);
+                dst_reg1 = get_reg_name(s.index, 64);
+                src_reg = get_reg_name(mod->reg, 64);
+            }
+            else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
+                dst_reg0 = get_reg_name(s.base, 64);
+                dst_reg1 = get_reg_name(s.index, 64);
+                src_reg = get_reg_name(mod->reg, 16);
+            }
+            else {
+                dst_reg0 = get_reg_name(s.base, 64);
+                dst_reg1 = get_reg_name(s.index, 64);
+                src_reg = get_reg_name(mod->reg, 32);
+            }
+
+            printf("mov [%s+%s*%d], %s\n", dst_reg0, dst_reg1, s.factor, src_reg);
+        }
+    }
+    return consumed;
+}
+
 void disasm(const uint8_t *instructions, size_t len)
 {
-    for (size_t i = 0; i < len; i++) {
-        switch (instructions[i]) {
-            case 0x50 ... 0x57: {
-                bool x64 = true;
-                uint8_t reg = instructions[i] - 0x50;
-                if (i > 0) {
-                    struct rex_prefix rex;
-                    uint8_t prefix = instructions[i - 1]; 
-                    if (rex_extract(prefix, &rex)) {
-                        if (rex.b) {
-                            reg += 8;
-                        }
-                        x64 = rex.w;
-                    }
-                }
+    disasm_ctx_t ctx = {0};
+    ctx.start = instructions;
+    ctx.current = instructions;
+    ctx.end = instructions + len;
 
-                const char *reg_name = x64 ? reg_names_x64[reg] : reg_names_x86[reg];
+    while (ctx.current < ctx.end) {
+        disasm_parse_prefixes(&ctx);
+        if (ctx.current >= ctx.end)
+            break;
+
+        uint8_t opcode = *ctx.current;
+        //printf("opcode: %d\n", opcode);
+        size_t consumed = 1;
+
+        instr_type_t type = instruction_types[opcode];
+        switch (type) {
+            case INSTR_PUSH_REG: {
+                uint8_t reg = opcode - 0x50;
+                bool x64 = true;
+                if (ctx.has_rex) {
+                    if (ctx.rex.b)
+                        reg += 8;
+                    x64 = ctx.rex.w; 
+                }
+                const char *reg_name = get_reg_name(reg, x64 ? 64 : 32);
                 printf("push %s\n", reg_name);
                 break;
             }
-            case 0x89: {
-                /*
-                 * MOV 	r/m16/32/64 	r16/32/64
-                 */
-                
-
-                if (i + 1 >= len) {
+            case INSTR_MOV_RM_R: {
+                if (!check_bounds(&ctx, 1)) {
                     printf("malformed. no modrm byte\n");
-                    return;
+                    break;
                 }
                 
                 struct modrm mod;
-                modrm_extract(instructions[i + 1], &mod);
+                modrm_extract(ctx.current[1], &mod);
+                consumed++; // modrm
 
-                printf("mod rm: %d\n", mod.rm);
-
-                bool rex_present = false;
                 bool x64 = false;
-                bool addrsize_override = false;
 
-                if (i > 0) {
-                    struct rex_prefix rex;
-                    uint8_t prefix = instructions[i - 1]; 
-
-                    if (rex_extract(prefix, &rex)) {
-                        if (rex.r) {
-                            mod.reg += 8;
-                        }
-                        if (rex.b) {
-                            mod.rm += 8;
-                        }
-                        rex_present = true;
-                        x64 = rex.w;
-                    }
-
-                    if (i > 1 && instructions[i - 2] == PREFIX_ADDR_SIZE_OVERRIDE) {
-                        addrsize_override = true;
-                    }
+                // apply extensions
+                if (ctx.has_rex) {
+                    if (ctx.rex.r)
+                        mod.reg += 8;
+                    if (ctx.rex.b)
+                        mod.rm += 8;
+                    x64 = ctx.rex.w;
                 }
 
                 if (mod.mod == 3) {
-                    // register-direct addressing mode is used
-                    uint8_t src_reg = mod.reg;
-                    uint8_t dst_reg = mod.rm;
-
-                    const char *src_name = x64 ? reg_names_x64[src_reg] : reg_names_x86[src_reg];
-                    const char *dst_name = x64 ? reg_names_x64[dst_reg] : reg_names_x86[dst_reg];
-
+                    const char *src_name = get_reg_name(mod.reg, x64 ? 64 : 32);
+                    const char *dst_name = get_reg_name(mod.rm, x64 ? 64 : 32);
                     printf("mov %s, %s\n", dst_name, src_name);
-                    i += 1;
-                    continue;
                 }
                 else {
-                    // register-indirect addressing mode is used
-                    if (mod.mod == 0) {
-                        if ((mod.rm >= 0 && mod.rm <= 3) || mod.rm == 6 || mod.rm == 7) {
-                            uint8_t src_reg = mod.reg;
-                            uint8_t dst_reg = mod.rm;
-
-                            printf("mov [%s], %s\n", reg_names_x64[dst_reg], reg_names_x64[src_reg]);
-                            i += 1;
-                            continue;
-                        }
-
-                        // handle SIB
-                        if (mod.rm == 4) {
-                            printf("here\n");
-                            if (i + 2 >= len) {
-                                printf("no sib byte\n");
-                                return;
-                            }
-                         
-                            struct sib s;
-                            sib_extract(instructions[i + 2], &s);
-
-                            printf("mov [%s+%s*%d], %s\n", reg_names_x64[s.base], reg_names_x64[s.index], s.factor, reg_names_x64[mod.reg]);
-
-                            i += 2;
-                            continue;
-                        }
-
-                        // handle [RIP/EIP + disp32]
-                        if (mod.rm == 5) {
-                            uint32_t disp;
-                            memcpy(&disp, &instructions[i + 2], 4);
-
-                            uint32_t offset = 6;
-                            if (addrsize_override)
-                                offset++;
-                            if (rex_present)
-                                offset++;
-                            offset += disp;
-                            
-                            const char *reg = addrsize_override ? "eip" : "rip";
-                            printf("mov [%s+0x%x], %s # %x\n", reg, disp, reg_names_x64[mod.reg], offset);
-                            i += 6;
-                            continue;
-                        }
-                    }
-                    else if (mod.mod == 1) {
-                    }
-                    else if (mod.mod == 2) {
-                    }
+                    ctx.current += consumed;
+                    consumed = handle_memory_operand(&ctx, &mod);
                 }
-
+                break;
+            }
+            default: {
+                //printf("unknown opcode: 0x%02x\n", opcode);
                 break;
             }
         }
+
+        ctx.current += consumed;
+        reset_ctx(&ctx);
     }
 }

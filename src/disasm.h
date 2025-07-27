@@ -3,8 +3,47 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "prefix.h"
 
-enum disasm_register_x64 {
+typedef enum {
+    /* group 1 */
+    INSTR_PREFIX_LOCK = 1 << 0,
+    INSTR_PREFIX_REPNE = 1 << 1,
+    INSTR_PREFIX_REP_REPE = 1 << 2,
+    /* group 2 */
+    INSTR_PREFIX_0x2e = 1 << 3,
+    INSTR_PREFIX_SS = 1 << 4,
+    INSTR_PREFIX_0x3e = 1 << 5,
+    INSTR_PREFIX_ES = 1 << 6,
+    INSTR_PREFIX_FS = 1 << 7,
+    INSTR_PREFIX_GS = 1 << 8,
+    INSTR_PREFIX_BRANCH_NOT_TAKEN = 1 << 9,
+    INSTR_PREFIX_BRANCH_TAKEN = 1 << 10,
+    /* group 3 */
+    INSTR_PREFIX_OP = 1 << 11,
+    /* group 4 */
+    INSTR_PREFIX_ADDR_SIZE = 1 << 12,
+} instr_prefix_flag_t;
+
+#define SET_FLAG(flags, x) ((flags) |= (x))
+#define HAS_FLAG(flags, x) (((flags) & (x)) != 0)
+
+typedef enum {
+    INSTR_PUSH_REG = 1,
+    INSTR_MOV_RM_R,
+    INSTR_UNKNOWN,
+} instr_type_t;
+
+typedef struct {
+    const uint8_t *start;
+    const uint8_t *current;
+    const uint8_t *end;
+    bool has_rex;
+    struct rex_prefix rex;
+    uint16_t prefixes;
+} disasm_ctx_t;
+
+enum disasm_register_64 {
     REG_RAX,
     REG_RCX,
     REG_RDX,
@@ -23,26 +62,7 @@ enum disasm_register_x64 {
     REG_R15,
 };
 
-static const char *reg_names_x64[] = {
-    "rax",
-    "rcx",
-    "rdx",
-    "rbx",
-    "rsp",
-    "rbp",
-    "rsi",
-    "rdi",
-    "r8", 
-    "r9", 
-    "r10",
-    "r11",
-    "r12",
-    "r13",
-    "r14",
-    "r15" 
-};
-
-enum disasm_register_x86 {
+enum disasm_register_32 {
     REG_EAX,
     REG_ECX,
     REG_EDX,
@@ -53,19 +73,31 @@ enum disasm_register_x86 {
     REG_EDI,
 };
 
-static const char *reg_names_x86[] = {
-    "eax",
-    "ecx",
-    "edx",
-    "ebx",
-    "esp",
-    "ebp",
-    "esi",
-    "edi"
+enum disasm_register_16 {
+    REG_AX,
+    REG_CX,
+    REG_DX,
+    REG_BX,
+    REG_SP,
+    REG_BP,
+    REG_SI,
+    REG_DI,
 };
 
+extern const char *reg_names_64[];
+extern const char *reg_names_32[];
+extern const char *reg_names_16[];
 
-// TODO: impl a linked list for storing all asm 
+extern const uint8_t instruction_types[256];
+
+static inline bool check_bounds(const disasm_ctx_t *ctx, size_t needed)
+{
+    return (ctx->current + needed) < ctx->end;
+}
+
+const char *get_reg_name(uint8_t reg, size_t arch);
+
+void disasm_parse_prefixes(disasm_ctx_t *ctx);
 void disasm(const uint8_t *instructions, size_t len);
 
 #endif // DISASM_H
