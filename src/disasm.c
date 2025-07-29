@@ -152,46 +152,17 @@ static inline void reset_ctx(disasm_ctx_t *ctx)
 static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 {
     size_t consumed = 0;
-    
+
+    operand_size_t op_size = get_operand_size(ctx);
+    addr_size_t addr_size = get_addr_size(ctx);
+
+    reg_size_t reg_op_size = (reg_size_t)op_size;
+    reg_size_t reg_addr_size = (reg_size_t)addr_size;
+
     if (mod->mod == 0) {
         if ((mod->rm >= 0 && mod->rm <= 3) || mod->rm == 6 || mod->rm == 7) {
-            uint8_t src = mod->reg;
-            uint8_t dst = mod->rm;
-
-            const char *src_reg;
-            const char *dst_reg;
-
-            if (ctx->has_rex && ctx->rex.w) {
-                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, REG_SIZE_32);
-                    src_reg = get_reg_name(src, REG_SIZE_64);
-                }
-                else {
-                    dst_reg = get_reg_name(dst, REG_SIZE_64);
-                    src_reg = get_reg_name(src, REG_SIZE_64);
-                }
-            }
-            else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
-                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, REG_SIZE_32);
-                    src_reg = get_reg_name(src, REG_SIZE_16);
-                }
-                else {
-                    dst_reg = get_reg_name(dst, REG_SIZE_64);
-                    src_reg = get_reg_name(src, REG_SIZE_16);
-                }
-            }
-            else {
-                if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, REG_SIZE_32);
-                    src_reg = get_reg_name(src, REG_SIZE_32);
-                }
-                else {
-                    dst_reg = get_reg_name(dst, REG_SIZE_64);
-                    src_reg = get_reg_name(src, REG_SIZE_32);
-                }
-            }
-
+            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
+            const char *dst_reg = get_reg_name(mod->rm, reg_addr_size);
             printf("mov [%s], %s\n", dst_reg, src_reg);
         }
         if (mod->rm == 4) {
@@ -204,44 +175,11 @@ static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
             sib_extract(*ctx->current, &s);
             consumed++;
 
-            const char *src_reg;
-            const char *dst_reg0;
-            const char *dst_reg1;
+            const char *base_reg = get_reg_name(s.base, reg_addr_size);
+            const char *index_reg = get_reg_name(s.index, reg_addr_size);
+            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
 
-            if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                if (ctx->has_rex && ctx->rex.w) {
-                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
-                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
-                    src_reg = get_reg_name(mod->reg, REG_SIZE_64);
-                }
-                else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
-                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
-                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
-                    src_reg = get_reg_name(mod->reg, REG_SIZE_16);
-                }
-                else {
-                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
-                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
-                    src_reg = get_reg_name(mod->reg, REG_SIZE_32);
-                }
-            }
-            else if (ctx->has_rex && ctx->rex.w) {
-                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
-                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
-                src_reg = get_reg_name(mod->reg, REG_SIZE_64);
-            }
-            else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
-                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
-                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
-                src_reg = get_reg_name(mod->reg, REG_SIZE_16);
-            }
-            else {
-                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
-                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
-                src_reg = get_reg_name(mod->reg, REG_SIZE_32);
-            }
-
-            printf("mov [%s+%s*%d], %s\n", dst_reg0, dst_reg1, s.factor, src_reg);
+            printf("mov [%s+%s*%d], %s\n", base_reg, index_reg, s.factor, src_reg);
         }
     }
     return consumed;

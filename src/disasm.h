@@ -29,21 +29,20 @@ typedef enum {
 #define HAS_FLAG(flags, x) (((flags) & (x)) != 0)
 
 typedef enum {
-    REG_SIZE_16,
-    REG_SIZE_32,
-    REG_SIZE_64,
+    REG_SIZE_16 = 0,
+    REG_SIZE_32 = 1,
+    REG_SIZE_64 = 2,
 } reg_size_t;
 
 typedef enum {
-    ADDR_SIZE_16,
-    ADDR_SIZE_32,
-    ADDR_SIZE_64,
+    ADDR_SIZE_32 = 1,
+    ADDR_SIZE_64 = 2,
 } addr_size_t;
 
 typedef enum {
-    OPERAND_SIZE_16,
-    OPERAND_SIZE_32,
-    OPERAND_SIZE_64,
+    OPERAND_SIZE_16 = 0,
+    OPERAND_SIZE_32 = 1,
+    OPERAND_SIZE_64 = 2,
 } operand_size_t;
 
 typedef struct {
