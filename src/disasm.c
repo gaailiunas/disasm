@@ -24,6 +24,12 @@ const reg_name_t reg_names[] = {
     {"r15w", "r15d", "r15"},
 };
 
+const char *op_size_suffixes[3] = {
+    "word ptr",
+    "dword ptr",
+    "qword ptr",
+};
+
 const uint8_t instruction_types[256] = {
     [0x50] = INSTR_PUSH_REG,
     [0x51] = INSTR_PUSH_REG,
@@ -152,7 +158,8 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 {
     operand_size_t op_size = get_operand_size(ctx);
     addr_size_t addr_size = get_addr_size(ctx);
-
+    
+    // casting for convenience, avoiding a bunch of switch cases
     reg_size_t reg_op_size = (reg_size_t)op_size;
     reg_size_t reg_addr_size = (reg_size_t)addr_size;
 
@@ -160,7 +167,7 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
         if ((mod->rm >= 0 && mod->rm <= 3) || mod->rm == 6 || mod->rm == 7) {
             const char *src_reg = get_reg_name(mod->reg, reg_op_size);
             const char *dst_reg = get_reg_name(mod->rm, reg_addr_size);
-            printf("mov [%s], %s\n", dst_reg, src_reg);
+            printf("mov %s [%s], %s\n", op_size_suffixes[op_size], dst_reg, src_reg);
         }
         if (mod->rm == 4) {
             if (!check_bounds(ctx, 1)) {
@@ -178,7 +185,7 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
             const char *index_reg = get_reg_name(s.index, reg_addr_size);
             const char *src_reg = get_reg_name(mod->reg, reg_op_size);
 
-            printf("mov [%s+%s*%d], %s\n", base_reg, index_reg, s.factor, src_reg);
+            printf("mov %s [%s+%s*%d], %s\n", op_size_suffixes[op_size], base_reg, index_reg, s.factor, src_reg);
         }
 
         if (mod->rm == 5) {
@@ -194,7 +201,7 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
             const char *src_reg = get_reg_name(mod->reg, reg_op_size);
             const char *dst_reg = addr_size == ADDR_SIZE_32 ? "eip" : "rip"; 
 
-            printf("mov [%s+0x%x], %s\n", dst_reg, disp, src_reg);
+            printf("mov %s [%s+0x%x], %s\n", op_size_suffixes[op_size], dst_reg, disp, src_reg);
         }
     }
 }
