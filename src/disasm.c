@@ -148,11 +148,8 @@ static inline void reset_ctx(disasm_ctx_t *ctx)
     ctx->prefixes = 0;
 }
 
-// returns a number of bytes consumed
-static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
+static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 {
-    size_t consumed = 0;
-
     operand_size_t op_size = get_operand_size(ctx);
     addr_size_t addr_size = get_addr_size(ctx);
 
@@ -168,12 +165,11 @@ static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
         if (mod->rm == 4) {
             if (!check_bounds(ctx, 1)) {
                 printf("no sib byte\n");
-                return consumed;
+                return;
             }
 
             struct sib s;
-            sib_extract(*ctx->current, &s);
-            consumed++;
+            sib_extract(*ctx->current++, &s);
 
             const char *base_reg = get_reg_name(s.base, reg_addr_size);
             const char *index_reg = get_reg_name(s.index, reg_addr_size);
@@ -182,7 +178,48 @@ static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
             printf("mov [%s+%s*%d], %s\n", base_reg, index_reg, s.factor, src_reg);
         }
     }
-    return consumed;
+}
+
+static void handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode)
+{
+    uint8_t reg = opcode - 0x50;
+    bool x64 = true;
+    if (ctx->has_rex) {
+        if (ctx->rex.b)
+            reg += 8;
+        x64 = ctx->rex.w; 
+    }
+    const char *reg_name = get_reg_name(reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
+    printf("push %s\n", reg_name);
+}
+
+static void handle_mov_rm_r(disasm_ctx_t *ctx)
+{
+    if (!check_bounds(ctx, 1)) {
+        printf("malformed. no modrm byte\n");
+        return;
+    }
+    
+    struct modrm mod;
+    modrm_extract(*ctx->current++, &mod);
+
+    bool x64 = false;
+    if (ctx->has_rex) {
+        if (ctx->rex.r)
+            mod.reg += 8;
+        if (ctx->rex.b)
+            mod.rm += 8;
+        x64 = ctx->rex.w;
+    }
+
+    if (mod.mod == 3) {
+        const char *src_name = get_reg_name(mod.reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
+        const char *dst_name = get_reg_name(mod.rm, x64 ? REG_SIZE_64 : REG_SIZE_32);
+        printf("mov %s, %s\n", dst_name, src_name);
+    }
+    else {
+        handle_memory_operand(ctx, &mod);
+    }
 }
 
 void disasm(const uint8_t *instructions, size_t len)
@@ -197,54 +234,16 @@ void disasm(const uint8_t *instructions, size_t len)
         if (ctx.current >= ctx.end)
             break;
 
-        uint8_t opcode = *ctx.current;
-        //printf("opcode: %d\n", opcode);
-        size_t consumed = 1;
-
+        uint8_t opcode = *ctx.current++;
         instr_type_t type = instruction_types[opcode];
+
         switch (type) {
             case INSTR_PUSH_REG: {
-                uint8_t reg = opcode - 0x50;
-                bool x64 = true;
-                if (ctx.has_rex) {
-                    if (ctx.rex.b)
-                        reg += 8;
-                    x64 = ctx.rex.w; 
-                }
-                const char *reg_name = get_reg_name(reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
-                printf("push %s\n", reg_name);
+                handle_instr_push_reg(&ctx, opcode);
                 break;
             }
             case INSTR_MOV_RM_R: {
-                if (!check_bounds(&ctx, 1)) {
-                    printf("malformed. no modrm byte\n");
-                    break;
-                }
-                
-                struct modrm mod;
-                modrm_extract(ctx.current[1], &mod);
-                consumed++; // modrm
-
-                bool x64 = false;
-
-                // apply extensions
-                if (ctx.has_rex) {
-                    if (ctx.rex.r)
-                        mod.reg += 8;
-                    if (ctx.rex.b)
-                        mod.rm += 8;
-                    x64 = ctx.rex.w;
-                }
-
-                if (mod.mod == 3) {
-                    const char *src_name = get_reg_name(mod.reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
-                    const char *dst_name = get_reg_name(mod.rm, x64 ? REG_SIZE_64 : REG_SIZE_32);
-                    printf("mov %s, %s\n", dst_name, src_name);
-                }
-                else {
-                    ctx.current += consumed;
-                    consumed = handle_memory_operand(&ctx, &mod);
-                }
+                handle_mov_rm_r(&ctx);
                 break;
             }
             default: {
@@ -253,7 +252,6 @@ void disasm(const uint8_t *instructions, size_t len)
             }
         }
 
-        ctx.current += consumed;
         reset_ctx(&ctx);
     }
 }
