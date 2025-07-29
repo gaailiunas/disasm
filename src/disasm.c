@@ -171,6 +171,9 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
             struct sib s;
             sib_extract(*ctx->current++, &s);
 
+            if (ctx->has_rex && ctx->rex.x)
+                s.index += 8;
+
             const char *base_reg = get_reg_name(s.base, reg_addr_size);
             const char *index_reg = get_reg_name(s.index, reg_addr_size);
             const char *src_reg = get_reg_name(mod->reg, reg_op_size);
