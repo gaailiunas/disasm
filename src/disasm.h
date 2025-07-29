@@ -117,6 +117,9 @@ static inline bool check_bounds(const disasm_ctx_t *ctx, size_t needed)
     return (ctx->current + needed) < ctx->end;
 }
 
+addr_size_t get_addr_size(disasm_ctx_t *ctx);
+operand_size_t get_operand_size(disasm_ctx_t *ctx);
+
 const char *get_reg_name(uint8_t reg, reg_size_t size);
 
 void disasm_parse_prefixes(disasm_ctx_t *ctx);

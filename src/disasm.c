@@ -16,12 +16,12 @@ const reg_name_t reg_names[] = {
     {"di", "edi", "rdi"},
     {"r8w", "r8d", "r8"},
     {"r9w", "r9d", "r9"},
-    {"r10w","r10d", "r10"},
-    {"r11w","r11d", "r11"},
-    {"r12w","r12d", "r12"},
-    {"r13w","r13d", "r13"},
-    {"r14w","r14d", "r14"},
-    {"r15w","r15d", "r15"},
+    {"r10w", "r10d", "r10"},
+    {"r11w", "r11d", "r11"},
+    {"r12w", "r12d", "r12"},
+    {"r13w", "r13d", "r13"},
+    {"r14w", "r14d", "r14"},
+    {"r15w", "r15d", "r15"},
 };
 
 const uint8_t instruction_types[256] = {
@@ -35,6 +35,20 @@ const uint8_t instruction_types[256] = {
     [0x57] = INSTR_PUSH_REG,
     [0x89] = INSTR_MOV_RM_R,
 };
+
+addr_size_t get_addr_size(disasm_ctx_t *ctx)
+{
+    return HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE) ? ADDR_SIZE_32 : ADDR_SIZE_64;
+}
+
+operand_size_t get_operand_size(disasm_ctx_t *ctx)
+{
+    if (ctx->has_rex && ctx->rex.w)
+        return OPERAND_SIZE_64;
+    if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP))
+        return OPERAND_SIZE_16;
+    return OPERAND_SIZE_32;
+}
 
 const char *get_reg_name(uint8_t reg, reg_size_t size)
 {
