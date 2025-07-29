@@ -180,6 +180,22 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 
             printf("mov [%s+%s*%d], %s\n", base_reg, index_reg, s.factor, src_reg);
         }
+
+        if (mod->rm == 5) {
+            if (!check_bounds(ctx, 4)) {
+                printf("not enough bytes for 4byte disp\n");
+                return;
+            }
+
+            uint32_t disp;
+            memcpy(&disp, ctx->current, 4);
+            ctx->current += 4;
+            
+            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
+            const char *dst_reg = addr_size == ADDR_SIZE_32 ? "eip" : "rip"; 
+
+            printf("mov [%s+0x%x], %s\n", dst_reg, disp, src_reg);
+        }
     }
 }
 
