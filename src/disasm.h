@@ -29,6 +29,30 @@ typedef enum {
 #define HAS_FLAG(flags, x) (((flags) & (x)) != 0)
 
 typedef enum {
+    REG_SIZE_16,
+    REG_SIZE_32,
+    REG_SIZE_64,
+} reg_size_t;
+
+typedef enum {
+    ADDR_SIZE_16,
+    ADDR_SIZE_32,
+    ADDR_SIZE_64,
+} addr_size_t;
+
+typedef enum {
+    OPERAND_SIZE_16,
+    OPERAND_SIZE_32,
+    OPERAND_SIZE_64,
+} operand_size_t;
+
+typedef struct {
+    const char *r16;
+    const char *r32;
+    const char *r64;
+} reg_name_t;
+
+typedef enum {
     INSTR_PUSH_REG = 1,
     INSTR_MOV_RM_R,
     INSTR_UNKNOWN,
@@ -84,9 +108,7 @@ enum disasm_register_16 {
     REG_DI,
 };
 
-extern const char *reg_names_64[];
-extern const char *reg_names_32[];
-extern const char *reg_names_16[];
+extern const reg_name_t reg_names[];
 
 extern const uint8_t instruction_types[256];
 
@@ -95,7 +117,7 @@ static inline bool check_bounds(const disasm_ctx_t *ctx, size_t needed)
     return (ctx->current + needed) < ctx->end;
 }
 
-const char *get_reg_name(uint8_t reg, size_t arch);
+const char *get_reg_name(uint8_t reg, reg_size_t size);
 
 void disasm_parse_prefixes(disasm_ctx_t *ctx);
 void disasm(const uint8_t *instructions, size_t len);

@@ -5,45 +5,23 @@
 #include <string.h>
 #include <stdio.h>
 
-const char *reg_names_64[] = {
-    "rax",
-    "rcx",
-    "rdx",
-    "rbx",
-    "rsp",
-    "rbp",
-    "rsi",
-    "rdi",
-    "r8", 
-    "r9", 
-    "r10",
-    "r11",
-    "r12",
-    "r13",
-    "r14",
-    "r15" 
-};
-
-const char *reg_names_32[] = {
-    "eax",
-    "ecx",
-    "edx",
-    "ebx",
-    "esp",
-    "ebp",
-    "esi",
-    "edi"
-};
-
-const char *reg_names_16[] = {
-    "ax",
-    "cx",
-    "dx",
-    "bx",
-    "sp",
-    "bp",
-    "si",
-    "di"
+const reg_name_t reg_names[] = {
+    {"ax", "eax", "rax"},
+    {"cx", "ecx", "rcx"},
+    {"dx", "edx", "rdx"},
+    {"bx", "ebx", "rbx"},
+    {"sp", "esp", "rsp"},
+    {"bp", "ebp", "rbp"},
+    {"si", "esi", "rsi"},
+    {"di", "edi", "rdi"},
+    {"r8w", "r8d", "r8"},
+    {"r9w", "r9d", "r9"},
+    {"r10w","r10d", "r10"},
+    {"r11w","r11d", "r11"},
+    {"r12w","r12d", "r12"},
+    {"r13w","r13d", "r13"},
+    {"r14w","r14d", "r14"},
+    {"r15w","r15d", "r15"},
 };
 
 const uint8_t instruction_types[256] = {
@@ -58,17 +36,20 @@ const uint8_t instruction_types[256] = {
     [0x89] = INSTR_MOV_RM_R,
 };
 
-const char *get_reg_name(uint8_t reg, size_t arch)
+const char *get_reg_name(uint8_t reg, reg_size_t size)
 {
-    switch (arch) {
-        case 16:
-            return reg_names_16[reg];
-        case 32:
-            return reg_names_32[reg];
-        case 64:
-            return reg_names_64[reg];
+    if (reg >= sizeof(reg_names) / sizeof(reg_names[0]))
+        return "unk";
+
+    switch (size) {
+        case REG_SIZE_16:
+            return reg_names[reg].r16;
+        case REG_SIZE_32:
+            return reg_names[reg].r32;
+        case REG_SIZE_64:
+            return reg_names[reg].r64;
         default:
-            return reg_names_32[reg];
+            return reg_names[reg].r32;
     }
 }
 
@@ -168,32 +149,32 @@ static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 
             if (ctx->has_rex && ctx->rex.w) {
                 if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, 32);
-                    src_reg = get_reg_name(src, 64);
+                    dst_reg = get_reg_name(dst, REG_SIZE_32);
+                    src_reg = get_reg_name(src, REG_SIZE_64);
                 }
                 else {
-                    dst_reg = get_reg_name(dst, 64);
-                    src_reg = get_reg_name(src, 64);
+                    dst_reg = get_reg_name(dst, REG_SIZE_64);
+                    src_reg = get_reg_name(src, REG_SIZE_64);
                 }
             }
             else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
                 if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, 32);
-                    src_reg = get_reg_name(src, 16);
+                    dst_reg = get_reg_name(dst, REG_SIZE_32);
+                    src_reg = get_reg_name(src, REG_SIZE_16);
                 }
                 else {
-                    dst_reg = get_reg_name(dst, 64);
-                    src_reg = get_reg_name(src, 16);
+                    dst_reg = get_reg_name(dst, REG_SIZE_64);
+                    src_reg = get_reg_name(src, REG_SIZE_16);
                 }
             }
             else {
                 if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
-                    dst_reg = get_reg_name(dst, 32);
-                    src_reg = get_reg_name(src, 32);
+                    dst_reg = get_reg_name(dst, REG_SIZE_32);
+                    src_reg = get_reg_name(src, REG_SIZE_32);
                 }
                 else {
-                    dst_reg = get_reg_name(dst, 64);
-                    src_reg = get_reg_name(src, 32);
+                    dst_reg = get_reg_name(dst, REG_SIZE_64);
+                    src_reg = get_reg_name(src, REG_SIZE_32);
                 }
             }
 
@@ -215,35 +196,35 @@ static size_t handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 
             if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_ADDR_SIZE)) {
                 if (ctx->has_rex && ctx->rex.w) {
-                    dst_reg0 = get_reg_name(s.base, 32);
-                    dst_reg1 = get_reg_name(s.index, 32);
-                    src_reg = get_reg_name(mod->reg, 64);
+                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
+                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
+                    src_reg = get_reg_name(mod->reg, REG_SIZE_64);
                 }
                 else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
-                    dst_reg0 = get_reg_name(s.base, 32);
-                    dst_reg1 = get_reg_name(s.index, 32);
-                    src_reg = get_reg_name(mod->reg, 16);
+                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
+                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
+                    src_reg = get_reg_name(mod->reg, REG_SIZE_16);
                 }
                 else {
-                    dst_reg0 = get_reg_name(s.base, 32);
-                    dst_reg1 = get_reg_name(s.index, 32);
-                    src_reg = get_reg_name(mod->reg, 32);
+                    dst_reg0 = get_reg_name(s.base, REG_SIZE_32);
+                    dst_reg1 = get_reg_name(s.index, REG_SIZE_32);
+                    src_reg = get_reg_name(mod->reg, REG_SIZE_32);
                 }
             }
             else if (ctx->has_rex && ctx->rex.w) {
-                dst_reg0 = get_reg_name(s.base, 64);
-                dst_reg1 = get_reg_name(s.index, 64);
-                src_reg = get_reg_name(mod->reg, 64);
+                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
+                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
+                src_reg = get_reg_name(mod->reg, REG_SIZE_64);
             }
             else if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
-                dst_reg0 = get_reg_name(s.base, 64);
-                dst_reg1 = get_reg_name(s.index, 64);
-                src_reg = get_reg_name(mod->reg, 16);
+                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
+                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
+                src_reg = get_reg_name(mod->reg, REG_SIZE_16);
             }
             else {
-                dst_reg0 = get_reg_name(s.base, 64);
-                dst_reg1 = get_reg_name(s.index, 64);
-                src_reg = get_reg_name(mod->reg, 32);
+                dst_reg0 = get_reg_name(s.base, REG_SIZE_64);
+                dst_reg1 = get_reg_name(s.index, REG_SIZE_64);
+                src_reg = get_reg_name(mod->reg, REG_SIZE_32);
             }
 
             printf("mov [%s+%s*%d], %s\n", dst_reg0, dst_reg1, s.factor, src_reg);
@@ -278,7 +259,7 @@ void disasm(const uint8_t *instructions, size_t len)
                         reg += 8;
                     x64 = ctx.rex.w; 
                 }
-                const char *reg_name = get_reg_name(reg, x64 ? 64 : 32);
+                const char *reg_name = get_reg_name(reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
                 printf("push %s\n", reg_name);
                 break;
             }
@@ -304,8 +285,8 @@ void disasm(const uint8_t *instructions, size_t len)
                 }
 
                 if (mod.mod == 3) {
-                    const char *src_name = get_reg_name(mod.reg, x64 ? 64 : 32);
-                    const char *dst_name = get_reg_name(mod.rm, x64 ? 64 : 32);
+                    const char *src_name = get_reg_name(mod.reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
+                    const char *dst_name = get_reg_name(mod.rm, x64 ? REG_SIZE_64 : REG_SIZE_32);
                     printf("mov %s, %s\n", dst_name, src_name);
                 }
                 else {
