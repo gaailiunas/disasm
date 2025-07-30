@@ -164,44 +164,53 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
     reg_size_t reg_addr_size = (reg_size_t)addr_size;
 
     if (mod->mod == 0) {
-        if ((mod->rm >= 0 && mod->rm <= 3) || mod->rm == 6 || mod->rm == 7) {
-            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-            const char *dst_reg = get_reg_name(mod->rm, reg_addr_size);
-            printf("mov %s [%s], %s\n", op_size_suffixes[op_size], dst_reg, src_reg);
-        }
-        if (mod->rm == 4) {
-            if (!check_bounds(ctx, 1)) {
-                printf("no sib byte\n");
-                return;
+        switch (mod->rm) {
+            case 0:
+            case 1:
+            case 2:
+            case 3:
+            case 6:
+            case 7: {
+                const char *src_reg = get_reg_name(mod->reg, reg_op_size);
+                const char *dst_reg = get_reg_name(mod->rm, reg_addr_size);
+                printf("mov %s [%s], %s\n", op_size_suffixes[op_size], dst_reg, src_reg);
+                break;
             }
+            case 4: {
+                if (!check_bounds(ctx, 1)) {
+                    printf("no sib byte\n");
+                    return;
+                }
 
-            struct sib s;
-            sib_extract(*ctx->current++, &s);
+                struct sib s;
+                sib_extract(*ctx->current++, &s);
 
-            if (ctx->has_rex && ctx->rex.x)
-                s.index += 8;
+                if (ctx->has_rex && ctx->rex.x)
+                    s.index += 8;
 
-            const char *base_reg = get_reg_name(s.base, reg_addr_size);
-            const char *index_reg = get_reg_name(s.index, reg_addr_size);
-            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
+                const char *base_reg = get_reg_name(s.base, reg_addr_size);
+                const char *index_reg = get_reg_name(s.index, reg_addr_size);
+                const char *src_reg = get_reg_name(mod->reg, reg_op_size);
 
-            printf("mov %s [%s+%s*%d], %s\n", op_size_suffixes[op_size], base_reg, index_reg, s.factor, src_reg);
-        }
-
-        if (mod->rm == 5) {
-            if (!check_bounds(ctx, 4)) {
-                printf("not enough bytes for 4byte disp\n");
-                return;
+                printf("mov %s [%s+%s*%d], %s\n", op_size_suffixes[op_size], base_reg, index_reg, s.factor, src_reg);
+                break;
             }
+            case 5: {
+                if (!check_bounds(ctx, 4)) {
+                    printf("not enough bytes for 4byte disp\n");
+                    return;
+                }
 
-            uint32_t disp;
-            memcpy(&disp, ctx->current, 4);
-            ctx->current += 4;
-            
-            const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-            const char *dst_reg = addr_size == ADDR_SIZE_32 ? "eip" : "rip"; 
+                uint32_t disp;
+                memcpy(&disp, ctx->current, 4);
+                ctx->current += 4;
+                
+                const char *src_reg = get_reg_name(mod->reg, reg_op_size);
+                const char *dst_reg = addr_size == ADDR_SIZE_32 ? "eip" : "rip"; 
 
-            printf("mov %s [%s+0x%x], %s\n", op_size_suffixes[op_size], dst_reg, disp, src_reg);
+                printf("mov %s [%s+0x%x], %s\n", op_size_suffixes[op_size], dst_reg, disp, src_reg);
+                break;
+            }
         }
     }
 }
