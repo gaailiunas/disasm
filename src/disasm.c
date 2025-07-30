@@ -56,6 +56,27 @@ operand_size_t get_operand_size(disasm_ctx_t *ctx)
     return OPERAND_SIZE_32;
 }
 
+// extend register with REX.R bit (ModR/M.reg field)
+static inline void extend_reg_with_rex_r(disasm_ctx_t *ctx, uint8_t *reg)
+{
+    if (ctx->has_rex && ctx->rex.r)
+        *reg += 8;
+}
+
+// extend register with REX.B bit (ModR/M.rm field)
+static inline void extend_reg_with_rex_b(disasm_ctx_t *ctx, uint8_t *reg)
+{
+    if (ctx->has_rex && ctx->rex.b)
+        *reg += 8;
+}
+
+// extend register with REX.X bit (SIB.index field)
+static inline void extend_reg_with_rex_x(disasm_ctx_t *ctx, uint8_t *reg)
+{
+    if (ctx->has_rex && ctx->rex.x)
+        *reg += 8;
+}
+
 const char *get_reg_name(uint8_t reg, reg_size_t size)
 {
     if (reg >= sizeof(reg_names) / sizeof(reg_names[0]))
@@ -185,8 +206,7 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
                 struct sib s;
                 sib_extract(*ctx->current++, &s);
 
-                if (ctx->has_rex && ctx->rex.x)
-                    s.index += 8;
+                extend_reg_with_rex_x(ctx, &s.index);
 
                 const char *base_reg = get_reg_name(s.base, reg_addr_size);
                 const char *index_reg = get_reg_name(s.index, reg_addr_size);
@@ -206,7 +226,7 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
                 ctx->current += 4;
                 
                 const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-                const char *dst_reg = addr_size == ADDR_SIZE_32 ? "eip" : "rip"; 
+                const char *dst_reg = addr_size == ADDR_SIZE_64 ? "rip" : "eip"; 
 
                 printf("mov %s [%s+0x%x], %s\n", op_size_suffixes[op_size], dst_reg, disp, src_reg);
                 break;
@@ -218,13 +238,9 @@ static void handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod)
 static void handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode)
 {
     uint8_t reg = opcode - 0x50;
-    bool x64 = true;
-    if (ctx->has_rex) {
-        if (ctx->rex.b)
-            reg += 8;
-        x64 = ctx->rex.w; 
-    }
-    const char *reg_name = get_reg_name(reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
+    extend_reg_with_rex_b(ctx, &reg);
+    reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
+    const char *reg_name = get_reg_name(reg, reg_size);
     printf("push %s\n", reg_name);
 }
 
@@ -238,18 +254,15 @@ static void handle_mov_rm_r(disasm_ctx_t *ctx)
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
 
-    bool x64 = false;
-    if (ctx->has_rex) {
-        if (ctx->rex.r)
-            mod.reg += 8;
-        if (ctx->rex.b)
-            mod.rm += 8;
-        x64 = ctx->rex.w;
-    }
+    extend_reg_with_rex_r(ctx, &mod.reg);
+    extend_reg_with_rex_b(ctx, &mod.rm);
 
     if (mod.mod == 3) {
-        const char *src_name = get_reg_name(mod.reg, x64 ? REG_SIZE_64 : REG_SIZE_32);
-        const char *dst_name = get_reg_name(mod.rm, x64 ? REG_SIZE_64 : REG_SIZE_32);
+        operand_size_t op_size = get_operand_size(ctx);
+        reg_size_t reg_size = (reg_size_t)op_size;
+
+        const char *src_name = get_reg_name(mod.reg, reg_size);
+        const char *dst_name = get_reg_name(mod.rm, reg_size);
         printf("mov %s, %s\n", dst_name, src_name);
     }
     else {
