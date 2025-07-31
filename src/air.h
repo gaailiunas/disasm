@@ -2,6 +2,7 @@
 #define AIR_H
 
 #include "defs.h"
+#include "sib.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -22,7 +23,7 @@ typedef struct {
         struct {
             reg_id_t base;
             reg_id_t index;
-            uint8_t factor;
+            scale_factor_t factor;
             int32_t disp;
             addr_size_t size;
         } mem;
