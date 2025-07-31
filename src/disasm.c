@@ -35,6 +35,11 @@ const char *op_size_suffixes[3] = {
 };
 
 const uint8_t instruction_types[256] = {
+    [0x07] = INSTR_POP_SEGREG,
+    [0x0F] = INSTR_POP_SEGREG,
+    [0x17] = INSTR_POP_SEGREG,
+    [0x1F] = INSTR_POP_SEGREG,
+
     [0x50] = INSTR_PUSH_REG,
     [0x51] = INSTR_PUSH_REG,
     [0x52] = INSTR_PUSH_REG,
@@ -43,7 +48,19 @@ const uint8_t instruction_types[256] = {
     [0x55] = INSTR_PUSH_REG,
     [0x56] = INSTR_PUSH_REG,
     [0x57] = INSTR_PUSH_REG,
+
+    [0x58] = INSTR_POP_REG,
+    [0x59] = INSTR_POP_REG,
+    [0x5A] = INSTR_POP_REG,
+    [0x5B] = INSTR_POP_REG,
+    [0x5C] = INSTR_POP_REG,
+    [0x5D] = INSTR_POP_REG,
+    [0x5E] = INSTR_POP_REG,
+    [0x5F] = INSTR_POP_REG,
+
     [0x89] = INSTR_MOV_RM_R,
+
+    [0x8F] = INSTR_POP_RM,
 };
 
 addr_size_t get_addr_size(disasm_ctx_t *ctx)
@@ -273,6 +290,72 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
     return false;
 }
 
+static bool handle_instr_pop_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
+{
+    instr->type = AIR_POP;
+    uint8_t reg = opcode - 0x58;
+
+    extend_reg_with_rex_b(ctx, &reg);
+    reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
+
+    instr->ops.unary.operand.type = OPERAND_REG;
+    instr->ops.unary.operand.reg.id = reg;
+    instr->ops.unary.operand.reg.size = reg_size;
+    return true;
+}
+
+static bool handle_instr_pop_segreg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
+{
+    uint8_t seg = SEGMENT_NONE;
+
+    instr->type = AIR_POP;
+    instr->ops.unary.operand.type = OPERAND_SEGMENT;
+
+    if (opcode == 0x1F) {
+        seg = SEGMENT_DS;
+    } else if (opcode == 0x07) {
+        seg = SEGMENT_ES;
+    } else if (opcode == 0x17) {
+        seg = SEGMENT_SS;
+    } else {
+        switch (*(ctx->current++)) {
+            case 0xA1: {
+                seg = SEGMENT_FS;
+                break;
+            }
+            case 0xA9: {
+                seg = SEGMENT_GS;
+                break;
+            }
+        }
+    }
+
+    instr->ops.unary.operand.segment.id = seg;
+    return true;
+}
+
+static bool handle_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
+{
+    if (!check_bounds(ctx, 1)) {
+        printf("malformed. no modrm byte\n");
+        return NULL;
+    }
+  
+    out->type = AIR_POP;
+    
+    struct modrm mod;
+    modrm_extract(*ctx->current++, &mod);
+    extend_reg_with_rex_b(ctx, &mod.rm);
+    reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
+
+    out->ops.unary.operand.type = OPERAND_REG;
+    out->ops.unary.operand.reg.id = mod.rm;
+    out->ops.unary.operand.reg.size = reg_size;
+
+    return handle_memory_operand(ctx, &mod, out);
+}
+
+
 static bool handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
 {
     uint8_t reg = opcode - 0x50;
@@ -320,6 +403,42 @@ static bool handle_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
     }
 
     return handle_memory_operand(ctx, &mod, out);
+}
+
+static void print_segment(const air_operand_t *op)
+{
+    if (op->type == OPERAND_SEGMENT) {
+        switch (op->segment.id) {
+            case SEGMENT_ES: {
+                printf("es");
+                break;
+            }
+            case SEGMENT_CS: {
+                printf("cs");
+                break;
+            }
+            case SEGMENT_SS: {
+                printf("ss");
+                break;
+            }
+            case SEGMENT_DS: {
+                printf("ds");
+                break;
+            }
+            case SEGMENT_FS: {
+                printf("fs");
+                break;
+            }
+            case SEGMENT_GS: {
+                printf("gs");
+                break;
+            }
+            default: {
+                printf("???");
+                break;
+            }
+        }
+    }
 }
 
 static void print_operand(const air_operand_t *op, reg_size_t size_hint)
@@ -371,13 +490,26 @@ static void print_operand(const air_operand_t *op, reg_size_t size_hint)
 static void print_instr(const air_instr_t *instr)
 {
     switch (instr->type) {
-        case AIR_PUSH: {
+        case AIR_POP: {
             const air_operand_t *op = &instr->ops.unary.operand;
+            printf("pop ");
             if (op->type == OPERAND_REG) {
-                printf("push ");
                 print_operand(op, op->reg.size);
-                printf("\n");
+            } else if (op->type == OPERAND_MEM) {
+                print_operand(op, REG_SIZE_64);
+            } else if (op->type == OPERAND_SEGMENT) {
+                print_segment(op);
             }
+            printf("\n");
+            break;
+        }
+        case AIR_PUSH: {
+            const air_operand_t *op = &instr->ops.binary.dst;
+            printf("push ");
+            if (op->type == OPERAND_REG) {
+                print_operand(op, op->reg.size);
+            }
+            printf("\n");
             break;
         }
         case AIR_MOV: {
@@ -441,6 +573,18 @@ void disasm(const uint8_t *instructions, size_t len)
         bool ok = true;
 
         switch (type) {
+            case INSTR_POP_SEGREG: {
+                ok = handle_instr_pop_segreg(&ctx, opcode, instr);
+                break;
+            }
+            case INSTR_POP_REG: {
+                ok = handle_instr_pop_reg(&ctx, opcode, instr);
+                break;
+            }
+            case INSTR_POP_RM: {
+                ok = handle_pop_rm(&ctx, instr);
+                break;
+            }
             case INSTR_PUSH_REG: {
                 ok = handle_instr_push_reg(&ctx, opcode, instr);
                 break;
