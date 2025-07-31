@@ -199,6 +199,22 @@ static inline void init_mem_operand(air_operand_t *op, reg_id_t base, reg_id_t i
     op->mem.size = size;
 }
 
+static int8_t get_disp8(disasm_ctx_t *ctx)
+{
+    int8_t disp;
+    memcpy(&disp, ctx->current, 1);
+    ctx->current += 1;
+    return disp;
+}
+
+static int32_t get_disp32(disasm_ctx_t *ctx)
+{
+    int32_t disp;
+    memcpy(&disp, ctx->current, 4);
+    ctx->current += 4;
+    return disp;
+}
+
 static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_instr_t *out)
 {
     operand_size_t op_size = get_operand_size(ctx);
@@ -226,13 +242,33 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                     return false;
                 }
 
+                /* TODO: put it all in a function to handle SIB */
+
                 struct sib s;
                 sib_extract(*ctx->current++, &s);
-
                 extend_reg_with_rex_x(ctx, &s.index);
 
                 init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-                init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, 0, addr_size);
+
+                if (s.base == REG_BP || s.base == REG_R13) {
+                    if (!check_bounds(ctx, 4)) {
+                        printf("not enough bytes for 4byte disp\n");
+                        return false;
+                    }
+
+                    int32_t disp = get_disp32(ctx);
+
+                    if (s.index == REG_SP) {
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, REG_NONE, FACTOR_1, disp, addr_size);
+                    }
+                    else {
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, s.index, s.factor, disp, addr_size);
+                    }
+                }
+                else {
+                    init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, 0, addr_size);
+                }
+
                 return true;
             }
             case 5: {
@@ -241,9 +277,7 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                     return false;
                 }
 
-                int32_t disp;
-                memcpy(&disp, ctx->current, 4);
-                ctx->current += 4;
+                int32_t disp = get_disp32(ctx);
                
                 init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
                 init_mem_operand(&out->ops.binary.dst, REG_IP, REG_NONE, FACTOR_1, disp, addr_size);
