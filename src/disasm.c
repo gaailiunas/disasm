@@ -198,6 +198,40 @@ static inline void reset_ctx(disasm_ctx_t *ctx)
     ctx->prefixes = 0;
 }
 
+static inline void init_reg_operand(air_operand_t *op, reg_id_t reg, reg_size_t size)
+{
+    op->type = OPERAND_REG;
+    op->reg.id = reg;
+    op->reg.size = size;
+}
+
+static inline void init_mem_operand(air_operand_t *op, reg_id_t base, reg_id_t index, 
+    scale_factor_t factor, int32_t disp, addr_size_t size)
+{
+    op->type = OPERAND_MEM;
+    op->mem.base = base;
+    op->mem.index = index;
+    op->mem.factor = factor;
+    op->mem.disp = disp;
+    op->mem.size = size;
+}
+
+static int8_t get_disp8(disasm_ctx_t *ctx)
+{
+    int8_t disp;
+    memcpy(&disp, ctx->current, 1);
+    ctx->current += 1;
+    return disp;
+}
+
+static int32_t get_disp32(disasm_ctx_t *ctx)
+{
+    int32_t disp;
+    memcpy(&disp, ctx->current, 4);
+    ctx->current += 4;
+    return disp;
+}
+
 static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_instr_t *out)
 {
     operand_size_t op_size = get_operand_size(ctx);
@@ -215,20 +249,8 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
             case 3:
             case 6:
             case 7: {
-                //const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-                //const char *dst_reg = get_reg_name(mod->rm, reg_addr_size);
-                //printf("DEBUG: mov %s [%s], %s\n", op_size_suffixes[op_size], dst_reg, src_reg);
-
-                out->ops.binary.src.type = OPERAND_REG;
-                out->ops.binary.src.reg.id = mod->reg;
-                out->ops.binary.src.reg.size = reg_op_size;
-
-                out->ops.binary.dst.type = OPERAND_MEM;
-                out->ops.binary.dst.mem.base = mod->rm;
-                out->ops.binary.dst.mem.index = REG_NONE;
-                out->ops.binary.dst.mem.factor = 1;
-                out->ops.binary.dst.mem.disp = 0;
-                out->ops.binary.dst.mem.size = addr_size;
+                init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
+                init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, 0, addr_size);
                 return true;
             }
             case 4: {
@@ -237,26 +259,33 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                     return false;
                 }
 
+                /* TODO: put it all in a function to handle SIB */
+
                 struct sib s;
                 sib_extract(*ctx->current++, &s);
-
                 extend_reg_with_rex_x(ctx, &s.index);
 
-                //const char *base_reg = get_reg_name(s.base, reg_addr_size);
-                //const char *index_reg = get_reg_name(s.index, reg_addr_size);
-                //const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-                //printf("DEBUG: mov %s [%s+%s*%d], %s\n", op_size_suffixes[op_size], base_reg, index_reg, s.factor, src_reg);
+                init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
 
-                out->ops.binary.src.type = OPERAND_REG;
-                out->ops.binary.src.reg.id = mod->reg;
-                out->ops.binary.src.reg.size = reg_op_size;
+                if (s.base == REG_BP || s.base == REG_R13) {
+                    if (!check_bounds(ctx, 4)) {
+                        printf("not enough bytes for 4byte disp\n");
+                        return false;
+                    }
 
-                out->ops.binary.dst.type = OPERAND_MEM;
-                out->ops.binary.dst.mem.base = s.base;
-                out->ops.binary.dst.mem.index = s.index;
-                out->ops.binary.dst.mem.factor = s.factor;
-                out->ops.binary.dst.mem.disp = 0;
-                out->ops.binary.dst.mem.size = addr_size;
+                    int32_t disp = get_disp32(ctx);
+
+                    if (s.index == REG_SP) {
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, REG_NONE, FACTOR_1, disp, addr_size);
+                    }
+                    else {
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, s.index, s.factor, disp, addr_size);
+                    }
+                }
+                else {
+                    init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, 0, addr_size);
+                }
+
                 return true;
             }
             case 5: {
@@ -265,24 +294,10 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                     return false;
                 }
 
-                int32_t disp;
-                memcpy(&disp, ctx->current, 4);
-                ctx->current += 4;
+                int32_t disp = get_disp32(ctx);
                
-                //const char *src_reg = get_reg_name(mod->reg, reg_op_size);
-                //const char *dst_reg = addr_size == ADDR_SIZE_64 ? "rip" : "eip"; 
-                //printf("DEBUG: mov %s [%s+0x%x], %s\n", op_size_suffixes[op_size], dst_reg, disp, src_reg);
-
-                out->ops.binary.src.type = OPERAND_REG;
-                out->ops.binary.src.reg.id = mod->reg;
-                out->ops.binary.src.reg.size = reg_op_size;
-
-                out->ops.binary.dst.type = OPERAND_MEM;
-                out->ops.binary.dst.mem.base = REG_IP;
-                out->ops.binary.dst.mem.index = REG_NONE;
-                out->ops.binary.dst.mem.factor = 1;
-                out->ops.binary.dst.mem.disp = disp;
-                out->ops.binary.dst.mem.size = addr_size;
+                init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
+                init_mem_operand(&out->ops.binary.dst, REG_IP, REG_NONE, FACTOR_1, disp, addr_size);
                 return true;
             }
         }
@@ -363,9 +378,7 @@ static bool handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t
     reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
 
     instr->type = AIR_PUSH;
-    instr->ops.unary.operand.type = OPERAND_REG;
-    instr->ops.unary.operand.reg.id = reg; 
-    instr->ops.unary.operand.reg.size = reg_size; 
+    init_reg_operand(&instr->ops.unary.operand, reg, reg_size);
     return true;
 }
 
@@ -373,7 +386,7 @@ static bool handle_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
 {
     if (!check_bounds(ctx, 1)) {
         printf("malformed. no modrm byte\n");
-        return NULL;
+        return false;
     }
   
     out->type = AIR_MOV;
@@ -388,17 +401,8 @@ static bool handle_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
         operand_size_t op_size = get_operand_size(ctx);
         reg_size_t reg_size = (reg_size_t)op_size;
 
-        //const char *src_name = get_reg_name(mod.reg, reg_size);
-        //const char *dst_name = get_reg_name(mod.rm, reg_size);
-        //printf("DEBUG: mov %s, %s\n", dst_name, src_name);
-
-        out->ops.binary.src.type = OPERAND_REG;
-        out->ops.binary.src.reg.id = mod.reg;
-        out->ops.binary.src.reg.size = reg_size;
-
-        out->ops.binary.dst.type = OPERAND_REG;
-        out->ops.binary.dst.reg.id = mod.rm;
-        out->ops.binary.dst.reg.size = reg_size;
+        init_reg_operand(&out->ops.binary.src, mod.reg, reg_size);
+        init_reg_operand(&out->ops.binary.dst, mod.rm, reg_size);
         return true;
     }
 

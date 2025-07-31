@@ -7,19 +7,19 @@ void sib_extract(uint8_t sib, struct sib *out)
     out->scale = sib >> 6;
     switch (out->scale) {
         case 0: {
-            out->factor = 1;
+            out->factor = FACTOR_1;
             break;
         }
         case 1: {
-            out->factor = 2;
+            out->factor = FACTOR_2;
             break;
         }
         case 2: {
-            out->factor = 4;
+            out->factor = FACTOR_4;
             break;
         }
         case 3: {
-            out->factor = 8;
+            out->factor = FACTOR_8;
             break;
         }
     }
