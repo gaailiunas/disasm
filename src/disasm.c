@@ -302,7 +302,63 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
             }
         }
     }
-    return false;
+
+    int disp_size;
+    int32_t disp = 0;
+
+    switch (mod->mod) {
+        case 1: {
+            disp_size = 1;
+            break;
+        }
+        case 2: {
+            disp_size = 4;
+            break;
+        }
+        default:
+            return false;
+    }
+
+    init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
+
+    if (mod->rm == REG_SP) {
+        if (!check_bounds(ctx, 1 + disp_size)) {
+            printf("no sib byte or sib+disp\n");
+            return false;
+        }
+        
+        struct sib s;
+        sib_extract(*ctx->current++, &s);
+
+        memcpy(&disp, ctx->current, disp_size);
+        ctx->current += disp_size;
+
+        if (disp_size == 1)
+            disp = (int8_t)disp;
+
+        if (s.index == REG_SP) {
+            init_mem_operand(&out->ops.binary.dst, s.base, REG_NONE, FACTOR_1, disp, addr_size);
+        }
+        else {
+            init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, disp, addr_size);
+        }
+    }
+    else {
+        if (!check_bounds(ctx, disp_size)) {
+            printf("not enough bytes for disp\n");
+            return false;
+        }
+
+        memcpy(&disp, ctx->current, disp_size);
+        ctx->current += disp_size;
+
+        if (disp_size == 1)
+            disp = (int8_t)disp;
+
+        init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, disp, addr_size);
+    }
+
+    return true;
 }
 
 static bool handle_instr_pop_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
@@ -470,16 +526,20 @@ static void print_operand(const air_operand_t *op, reg_size_t size_hint)
                 need_plus = true;
             }
 
-            if (op->mem.disp != 0 || (!need_plus && op->mem.base == REG_NONE && op->mem.index == REG_NONE)) {
-                if (need_plus && op->mem.disp >= 0) {
-                    printf("+0x%x", op->mem.disp);
+            int32_t disp = op->mem.disp;
+
+            if (disp != 0 || (!need_plus && op->mem.base == REG_NONE && op->mem.index == REG_NONE)) {
+                if (disp < 0) {
+                    printf("-%#x", -disp);
                 } else {
-                    printf("0x%x", op->mem.disp);
+                    if (need_plus) printf("+");
+                    printf("%#x", disp);
                 }
             }
 
             printf("]");
             break;
+
         }
         case OPERAND_IMM: {
             printf("0x%llx", (unsigned long long)op->imm.value);
