@@ -41,7 +41,7 @@ typedef enum {
 typedef enum {
     INSTR_PUSH_REG = 1,
     INSTR_MOV_RM_R,
-    INSTR_UNKNOWN,
+    INSTR_NONE = 0xff,
 } instr_type_t;
 
 typedef enum {
@@ -61,6 +61,8 @@ typedef enum {
     REG_R13,
     REG_R14,
     REG_R15,
+    REG_IP, // on actual hardware, IP doesn't have an id
+    REG_NONE = 0xff,
 } reg_id_t;
 
 #endif // DEFS_H

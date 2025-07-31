@@ -1,5 +1,6 @@
 #include "air.h"
 #include <stdlib.h>
+#include <string.h>
 
 air_instr_list_t *air_instr_list_new()
 {
@@ -22,15 +23,6 @@ void air_instr_list_free(air_instr_list_t *list)
     }
     list->head = NULL;
     list->tail = NULL;
-}
-
-air_instr_t *air_instr_new()
-{
-    air_instr_t *instr = (air_instr_t *)malloc(sizeof(air_instr_t));
-    if (instr) {
-        instr->next = NULL;
-    }
-    return instr;
 }
 
 void air_instr_list_add(air_instr_list_t *list, air_instr_t *instr)

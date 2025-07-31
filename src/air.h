@@ -41,7 +41,16 @@ typedef enum {
 
 typedef struct air_instr_s {
     air_instr_type_t type;
-    air_operand_t operands[2];
+    union {
+        struct {     
+            air_operand_t dst;
+            air_operand_t src;
+        } binary;
+        struct {
+            air_operand_t operand;
+        } unary;
+    } ops;
+    size_t length;
     struct air_instr_s *next;
 } air_instr_t;
 
@@ -53,8 +62,6 @@ typedef struct {
 
 air_instr_list_t *air_instr_list_new();
 void air_instr_list_free(air_instr_list_t *);
-
-air_instr_t *air_instr_new();
 
 void air_instr_list_add(air_instr_list_t *, air_instr_t *);
 
