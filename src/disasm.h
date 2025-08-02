@@ -26,6 +26,7 @@ typedef struct {
 
 extern const reg_name_t reg_names[];
 extern const char *op_size_suffixes[3];
+extern const char *segment_names[];
 
 extern const uint8_t instruction_types[256];
 

@@ -8,10 +8,10 @@
 
 typedef enum {
     OPERAND_REG,
-    OPERAND_SEGMENT,
     OPERAND_MEM,
     OPERAND_IMM,
-    OPERAND_NONE,
+
+    OPERAND_NONE = 0xff,
 } air_operand_type_t;
 
 typedef struct {
@@ -22,14 +22,12 @@ typedef struct {
             reg_size_t size;
         } reg;
         struct {
-            segment_id_t id;
-        } segment;
-        struct {
             reg_id_t base;
             reg_id_t index;
             scale_factor_t factor;
             int32_t disp;
             addr_size_t size;
+            seg_id_t segment;
         } mem;
         struct {
             int64_t value;
@@ -42,7 +40,8 @@ typedef enum {
     AIR_POP,
     AIR_PUSH,
     AIR_MOV,
-    AIR_UNKNOWN,
+
+    AIR_UNKNOWN = 0xff,
 } air_instr_type_t;
 
 typedef struct air_instr_s {

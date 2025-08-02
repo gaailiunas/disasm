@@ -40,13 +40,11 @@ typedef enum {
 
 typedef enum {
     INSTR_PUSH_REG = 1,
-    
     INSTR_POP_REG,
-    INSTR_POP_SEGREG,
+    INSTR_POP_SEG,
     INSTR_POP_RM,
-
     INSTR_MOV_RM_R,
-    
+
     INSTR_NONE = 0xff,
 } instr_type_t;
 
@@ -68,18 +66,19 @@ typedef enum {
     REG_R14,
     REG_R15,
     REG_IP, // on actual hardware, IP doesn't have an id
+
     REG_NONE = 0xff,
 } reg_id_t;
 
 typedef enum {
-    SEGMENT_ES,
-    SEGMENT_CS,
-    SEGMENT_SS,
-    SEGMENT_DS,
-    SEGMENT_FS,
-    SEGMENT_GS,
+    SEG_ES,
+    SEG_CS,
+    SEG_SS,
+    SEG_DS,
+    SEG_FS,
+    SEG_GS,
 
-    SEGMENT_NONE = 0xff,
-} segment_id_t;
+    SEG_NONE = 0xff,
+} seg_id_t;
 
 #endif // DEFS_H

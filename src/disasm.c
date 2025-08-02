@@ -34,11 +34,20 @@ const char *op_size_suffixes[3] = {
     "qword",
 };
 
+const char *segment_names[] = {
+    "es",
+    "cs",
+    "ss",
+    "ds",
+    "fs",
+    "gs",
+};
+
 const uint8_t instruction_types[256] = {
-    [0x07] = INSTR_POP_SEGREG,
-    [0x0F] = INSTR_POP_SEGREG,
-    [0x17] = INSTR_POP_SEGREG,
-    [0x1F] = INSTR_POP_SEGREG,
+    [0x07] = INSTR_POP_SEG,
+    [0x0F] = INSTR_POP_SEG, // 2byte
+    [0x17] = INSTR_POP_SEG,
+    [0x1F] = INSTR_POP_SEG,
 
     [0x50] = INSTR_PUSH_REG,
     [0x51] = INSTR_PUSH_REG,
@@ -77,6 +86,20 @@ operand_size_t get_operand_size(disasm_ctx_t *ctx)
     return OPERAND_SIZE_32;
 }
 
+const char *get_op_size_suffix(operand_size_t size)
+{
+    if (size > OPERAND_SIZE_64)
+        return "unk_size";
+    return op_size_suffixes[size];
+}
+
+const char *get_segment_name(seg_id_t id)
+{
+    if (id > SEG_GS)
+        return "unk";
+    return segment_names[id];
+}
+
 // extend register with REX.R bit (ModR/M.reg field)
 static inline void extend_reg_with_rex_r(disasm_ctx_t *ctx, uint8_t *reg)
 {
@@ -100,7 +123,7 @@ static inline void extend_reg_with_rex_x(disasm_ctx_t *ctx, uint8_t *reg)
 
 const char *get_reg_name(uint8_t reg, reg_size_t size)
 {
-    if (reg >= sizeof(reg_names) / sizeof(reg_names[0])) {
+    if (reg > REG_IP) {
         printf("going outside bounds. reg: %u\n", reg);
         return "unk";
     }
@@ -206,7 +229,7 @@ static inline void init_reg_operand(air_operand_t *op, reg_id_t reg, reg_size_t 
 }
 
 static inline void init_mem_operand(air_operand_t *op, reg_id_t base, reg_id_t index, 
-    scale_factor_t factor, int32_t disp, addr_size_t size)
+    scale_factor_t factor, int32_t disp, addr_size_t size, seg_id_t seg)
 {
     op->type = OPERAND_MEM;
     op->mem.base = base;
@@ -214,6 +237,7 @@ static inline void init_mem_operand(air_operand_t *op, reg_id_t base, reg_id_t i
     op->mem.factor = factor;
     op->mem.disp = disp;
     op->mem.size = size;
+    op->mem.segment = seg;
 }
 
 static int8_t get_disp8(disasm_ctx_t *ctx)
@@ -250,7 +274,7 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
             case 6:
             case 7: {
                 init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-                init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, 0, addr_size);
+                init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, 0, addr_size, SEG_NONE);
                 return true;
             }
             case 4: {
@@ -276,14 +300,14 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                     int32_t disp = get_disp32(ctx);
 
                     if (s.index == REG_SP) {
-                        init_mem_operand(&out->ops.binary.dst, REG_NONE, REG_NONE, FACTOR_1, disp, addr_size);
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
                     }
                     else {
-                        init_mem_operand(&out->ops.binary.dst, REG_NONE, s.index, s.factor, disp, addr_size);
+                        init_mem_operand(&out->ops.binary.dst, REG_NONE, s.index, s.factor, disp, addr_size, SEG_NONE);
                     }
                 }
                 else {
-                    init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, 0, addr_size);
+                    init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, 0, addr_size, SEG_NONE);
                 }
 
                 return true;
@@ -297,7 +321,7 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
                 int32_t disp = get_disp32(ctx);
                
                 init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-                init_mem_operand(&out->ops.binary.dst, REG_IP, REG_NONE, FACTOR_1, disp, addr_size);
+                init_mem_operand(&out->ops.binary.dst, REG_IP, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
                 return true;
             }
         }
@@ -337,10 +361,10 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
             disp = (int8_t)disp;
 
         if (s.index == REG_SP) {
-            init_mem_operand(&out->ops.binary.dst, s.base, REG_NONE, FACTOR_1, disp, addr_size);
+            init_mem_operand(&out->ops.binary.dst, s.base, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
         }
         else {
-            init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, disp, addr_size);
+            init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor, disp, addr_size, SEG_NONE);
         }
     }
     else {
@@ -355,90 +379,93 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod, air_inst
         if (disp_size == 1)
             disp = (int8_t)disp;
 
-        init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, disp, addr_size);
+        init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
     }
 
     return true;
 }
 
-static bool handle_instr_pop_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
+static bool handle_instr_pop_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *out)
 {
-    instr->type = AIR_POP;
     uint8_t reg = opcode - 0x58;
-
     extend_reg_with_rex_b(ctx, &reg);
+    out->type = AIR_POP;
     reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-
-    instr->ops.unary.operand.type = OPERAND_REG;
-    instr->ops.unary.operand.reg.id = reg;
-    instr->ops.unary.operand.reg.size = reg_size;
+    init_reg_operand(&out->ops.unary.operand, reg, reg_size);
     return true;
 }
 
-static bool handle_instr_pop_segreg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
+static bool handle_instr_pop_seg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *out)
 {
-    uint8_t seg = SEGMENT_NONE;
+    seg_id_t seg = SEG_NONE;
 
-    instr->type = AIR_POP;
-    instr->ops.unary.operand.type = OPERAND_SEGMENT;
-
-    if (opcode == 0x1F) {
-        seg = SEGMENT_DS;
-    } else if (opcode == 0x07) {
-        seg = SEGMENT_ES;
-    } else if (opcode == 0x17) {
-        seg = SEGMENT_SS;
-    } else {
-        switch (*(ctx->current++)) {
-            case 0xA1: {
-                seg = SEGMENT_FS;
-                break;
+    switch (opcode) {
+        case 0x0f: {
+            if (!check_bounds(ctx, 1)) {
+                printf("no second byte for 2byte pop\n");
+                return false;
             }
-            case 0xA9: {
-                seg = SEGMENT_GS;
-                break;
+            switch (*ctx->current++) {
+                case 0xa1: {
+                    seg = SEG_FS;
+                    break;
+                }
+                case 0xa9: {
+                    seg = SEG_GS;
+                    break;
+                }
+                default: {
+                    printf("pop invalid second byte\n");
+                    return false;
+                }
             }
+            break;
+        }
+        case 0x1f: {
+            seg = SEG_DS;
+            break;
+        }
+        case 0x07: {
+            seg = SEG_ES;
+            break;
+        }
+        case 0x17: {
+            seg = SEG_SS;
+            break;
         }
     }
 
-    instr->ops.unary.operand.segment.id = seg;
+    out->type = AIR_POP;
+    init_mem_operand(&out->ops.unary.operand, REG_NONE, REG_NONE, FACTOR_1, 0, 0, seg);
     return true;
 }
 
-static bool handle_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
+static bool handle_instr_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
 {
     if (!check_bounds(ctx, 1)) {
         printf("malformed. no modrm byte\n");
-        return NULL;
+        return false;
     }
-  
-    out->type = AIR_POP;
-    
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
     extend_reg_with_rex_b(ctx, &mod.rm);
+    out->type = AIR_POP;
     reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-
-    out->ops.unary.operand.type = OPERAND_REG;
-    out->ops.unary.operand.reg.id = mod.rm;
-    out->ops.unary.operand.reg.size = reg_size;
-
+    init_reg_operand(&out->ops.unary.operand, mod.rm, reg_size);
     return handle_memory_operand(ctx, &mod, out);
 }
 
-
-static bool handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *instr)
+static bool handle_instr_push_reg(disasm_ctx_t *ctx, uint8_t opcode, air_instr_t *out)
 {
     uint8_t reg = opcode - 0x50;
     extend_reg_with_rex_b(ctx, &reg);
+    out->type = AIR_PUSH;
     reg_size_t reg_size = HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-
-    instr->type = AIR_PUSH;
-    init_reg_operand(&instr->ops.unary.operand, reg, reg_size);
+    init_reg_operand(&out->ops.unary.operand, reg, reg_size);
     return true;
 }
 
-static bool handle_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
+static bool handle_instr_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
 {
     if (!check_bounds(ctx, 1)) {
         printf("malformed. no modrm byte\n");
@@ -465,42 +492,6 @@ static bool handle_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
     return handle_memory_operand(ctx, &mod, out);
 }
 
-static void print_segment(const air_operand_t *op)
-{
-    if (op->type == OPERAND_SEGMENT) {
-        switch (op->segment.id) {
-            case SEGMENT_ES: {
-                printf("es");
-                break;
-            }
-            case SEGMENT_CS: {
-                printf("cs");
-                break;
-            }
-            case SEGMENT_SS: {
-                printf("ss");
-                break;
-            }
-            case SEGMENT_DS: {
-                printf("ds");
-                break;
-            }
-            case SEGMENT_FS: {
-                printf("fs");
-                break;
-            }
-            case SEGMENT_GS: {
-                printf("gs");
-                break;
-            }
-            default: {
-                printf("???");
-                break;
-            }
-        }
-    }
-}
-
 static void print_operand(const air_operand_t *op, reg_size_t size_hint)
 {
     switch (op->type) {
@@ -510,7 +501,12 @@ static void print_operand(const air_operand_t *op, reg_size_t size_hint)
             break;
         }
         case OPERAND_MEM: {
-            const char *size_str = op_size_suffixes[size_hint];
+            if (op->mem.segment != SEG_NONE) {
+                printf("%s", get_segment_name(op->mem.segment)); 
+                break;
+            }
+
+            const char *size_str = get_op_size_suffix((operand_size_t)size_hint);
             printf("%s ptr [", size_str);
 
             bool need_plus = false;
@@ -559,10 +555,9 @@ static void print_instr(const air_instr_t *instr)
             printf("pop ");
             if (op->type == OPERAND_REG) {
                 print_operand(op, op->reg.size);
-            } else if (op->type == OPERAND_MEM) {
+            }
+            else if (op->type == OPERAND_MEM) {
                 print_operand(op, REG_SIZE_64);
-            } else if (op->type == OPERAND_SEGMENT) {
-                print_segment(op);
             }
             printf("\n");
             break;
@@ -637,8 +632,8 @@ void disasm(const uint8_t *instructions, size_t len)
         bool ok = true;
 
         switch (type) {
-            case INSTR_POP_SEGREG: {
-                ok = handle_instr_pop_segreg(&ctx, opcode, instr);
+            case INSTR_POP_SEG: {
+                ok = handle_instr_pop_seg(&ctx, opcode, instr);
                 break;
             }
             case INSTR_POP_REG: {
@@ -646,7 +641,7 @@ void disasm(const uint8_t *instructions, size_t len)
                 break;
             }
             case INSTR_POP_RM: {
-                ok = handle_pop_rm(&ctx, instr);
+                ok = handle_instr_pop_rm(&ctx, instr);
                 break;
             }
             case INSTR_PUSH_REG: {
@@ -654,7 +649,7 @@ void disasm(const uint8_t *instructions, size_t len)
                 break;
             }
             case INSTR_MOV_RM_R: {
-                ok = handle_mov_rm_r(&ctx, instr);
+                ok = handle_instr_mov_rm_r(&ctx, instr);
                 break;
             }
             default: {
