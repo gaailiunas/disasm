@@ -3,8 +3,8 @@
 
 #include "defs.h"
 #include "sib.h"
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     OPERAND_REG,
@@ -47,7 +47,7 @@ typedef enum {
 typedef struct air_instr_s {
     air_instr_type_t type;
     union {
-        struct {     
+        struct {
             air_operand_t dst;
             air_operand_t src;
         } binary;

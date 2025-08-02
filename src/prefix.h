@@ -1,8 +1,8 @@
 #ifndef PREFIX_H
 #define PREFIX_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #define PREFIX_LOCK 0xF0
 #define PREFIX_REPNE 0xF2

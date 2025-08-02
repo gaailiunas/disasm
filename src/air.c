@@ -17,7 +17,7 @@ void air_instr_list_free(air_instr_list_t *list)
 {
     air_instr_t *node = list->head;
     while (node) {
-        air_instr_t *next = node->next; 
+        air_instr_t *next = node->next;
         free(node);
         node = next;
     }

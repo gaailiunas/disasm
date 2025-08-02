@@ -1,0 +1,10 @@
+IndentWidth: 4
+ColumnLimit: 80
+AlignAfterOpenBracket: DontAlign
+AllowShortIfStatementsOnASingleLine: Never
+BreakBeforeBraces: Custom
+BraceWrapping:
+  BeforeElse: true
+  AfterFunction: true
+MaxEmptyLinesToKeep: 1
+PointerAlignment: Right

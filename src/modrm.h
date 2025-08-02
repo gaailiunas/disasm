@@ -1,8 +1,8 @@
 #ifndef MODRM_H
 #define MODRM_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct modrm {
     uint8_t mod;

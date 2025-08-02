@@ -1,10 +1,10 @@
 #ifndef DISASM_H
 #define DISASM_H
 
-#include <stdint.h>
-#include <stddef.h>
-#include "prefix.h"
 #include "defs.h"
+#include "prefix.h"
+#include <stddef.h>
+#include <stdint.h>
 
 #define SET_FLAG(flags, x) ((flags) |= (x))
 #define HAS_FLAG(flags, x) (((flags) & (x)) != 0)

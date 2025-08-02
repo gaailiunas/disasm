@@ -5,7 +5,7 @@
 
 typedef enum {
     FACTOR_1 = 1,
-    FACTOR_2 = 2, 
+    FACTOR_2 = 2,
     FACTOR_4 = 4,
     FACTOR_8 = 8
 } scale_factor_t;
