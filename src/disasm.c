@@ -78,13 +78,18 @@ addr_size_t get_addr_size(disasm_ctx_t *ctx)
                                                            : ADDR_SIZE_64;
 }
 
-operand_size_t get_operand_size(disasm_ctx_t *ctx)
+operand_size_t get_operand_size(disasm_ctx_t *ctx, operand_size_t default_size)
 {
     if (ctx->has_rex && ctx->rex.w)
         return OPERAND_SIZE_64;
     if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP))
         return OPERAND_SIZE_16;
-    return OPERAND_SIZE_32;
+    return default_size == OPERAND_SIZE_NONE ? OPERAND_SIZE_32 : default_size;
+}
+
+reg_size_t get_reg_size(disasm_ctx_t *ctx, reg_size_t default_size)
+{
+    return (reg_size_t)get_operand_size(ctx, (operand_size_t)default_size);
 }
 
 const char *get_op_size_suffix(operand_size_t size)
@@ -232,7 +237,7 @@ static inline void init_reg_operand(
 
 static inline void init_mem_operand(air_operand_t *op, reg_id_t base,
     reg_id_t index, scale_factor_t factor, int32_t disp, addr_size_t size,
-    seg_id_t seg)
+    seg_id_t seg, operand_size_t op_size)
 {
     op->type = OPERAND_MEM;
     op->mem.base = base;
@@ -240,6 +245,7 @@ static inline void init_mem_operand(air_operand_t *op, reg_id_t base,
     op->mem.factor = factor;
     op->mem.disp = disp;
     op->mem.size = size;
+    op->mem.op_size = op_size;
     op->mem.segment = seg;
 }
 
@@ -260,7 +266,7 @@ static int32_t get_disp32(disasm_ctx_t *ctx)
 }
 
 static bool handle_sib_operand(disasm_ctx_t *ctx, struct modrm *mod,
-    air_operand_t *mem_op, addr_size_t addr_size)
+    air_operand_t *mem_op, addr_size_t addr_size, operand_size_t op_size)
 {
     if (!check_bounds(ctx, 1)) {
         printf("no sib byte\n");
@@ -301,13 +307,14 @@ static bool handle_sib_operand(disasm_ctx_t *ctx, struct modrm *mod,
         }
         disp = get_disp32(ctx);
     }
-    init_mem_operand(
-        mem_op, base_reg, index_reg, s.factor, disp, addr_size, SEG_NONE);
+
+    init_mem_operand(mem_op, base_reg, index_reg, s.factor, disp, addr_size,
+        SEG_NONE, op_size);
     return true;
 }
 
-static bool handle_memory_operand(
-    disasm_ctx_t *ctx, struct modrm *mod, air_operand_t *mem_op)
+static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod,
+    air_operand_t *mem_op, operand_size_t op_size)
 {
     addr_size_t addr_size = get_addr_size(ctx);
 
@@ -319,12 +326,12 @@ static bool handle_memory_operand(
         case 3:
         case 6:
         case 7: {
-            init_mem_operand(
-                mem_op, mod->rm, REG_NONE, FACTOR_1, 0, addr_size, SEG_NONE);
+            init_mem_operand(mem_op, mod->rm, REG_NONE, FACTOR_1, 0, addr_size,
+                SEG_NONE, op_size);
             return true;
         }
         case 4: {
-            return handle_sib_operand(ctx, mod, mem_op, addr_size);
+            return handle_sib_operand(ctx, mod, mem_op, addr_size, op_size);
         }
         case 5: {
             if (!check_bounds(ctx, 4)) {
@@ -333,15 +340,15 @@ static bool handle_memory_operand(
             }
 
             int32_t disp = get_disp32(ctx);
-            init_mem_operand(
-                mem_op, REG_IP, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
+            init_mem_operand(mem_op, REG_IP, REG_NONE, FACTOR_1, disp,
+                addr_size, SEG_NONE, op_size);
             return true;
         }
         }
     }
 
     if (mod->rm == REG_SP) {
-        return handle_sib_operand(ctx, mod, mem_op, addr_size);
+        return handle_sib_operand(ctx, mod, mem_op, addr_size, op_size);
     }
 
     int disp_size;
@@ -371,8 +378,8 @@ static bool handle_memory_operand(
     if (disp_size == 1)
         disp = (int8_t)disp;
 
-    init_mem_operand(
-        mem_op, mod->rm, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
+    init_mem_operand(mem_op, mod->rm, REG_NONE, FACTOR_1, disp, addr_size,
+        SEG_NONE, op_size);
     return true;
 }
 
@@ -382,9 +389,8 @@ static bool handle_instr_pop_reg(
     uint8_t reg = opcode - 0x58;
     extend_reg_with_rex_b(ctx, &reg);
     out->type = AIR_POP;
-    reg_size_t reg_size =
-        HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-    init_reg_operand(&out->ops.unary.operand, reg, reg_size);
+    init_reg_operand(
+        &out->ops.unary.operand, reg, get_reg_size(ctx, REG_SIZE_64));
     return true;
 }
 
@@ -430,8 +436,8 @@ static bool handle_instr_pop_seg(
     }
 
     out->type = AIR_POP;
-    init_mem_operand(
-        &out->ops.unary.operand, REG_NONE, REG_NONE, FACTOR_1, 0, 0, seg);
+    init_mem_operand(&out->ops.unary.operand, REG_NONE, REG_NONE, FACTOR_1, 0,
+        0, seg, get_operand_size(ctx, OPERAND_SIZE_NONE));
     return true;
 }
 
@@ -445,7 +451,8 @@ static bool handle_instr_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
     modrm_extract(*ctx->current++, &mod);
     extend_reg_with_rex_b(ctx, &mod.rm);
     out->type = AIR_POP;
-    return handle_memory_operand(ctx, &mod, &out->ops.unary.operand);
+    return handle_memory_operand(ctx, &mod, &out->ops.unary.operand,
+        get_operand_size(ctx, OPERAND_SIZE_64));
 }
 
 static bool handle_instr_push_reg(
@@ -454,9 +461,8 @@ static bool handle_instr_push_reg(
     uint8_t reg = opcode - 0x50;
     extend_reg_with_rex_b(ctx, &reg);
     out->type = AIR_PUSH;
-    reg_size_t reg_size =
-        HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-    init_reg_operand(&out->ops.unary.operand, reg, reg_size);
+    init_reg_operand(
+        &out->ops.unary.operand, reg, get_reg_size(ctx, REG_SIZE_64));
     return true;
 }
 
@@ -471,12 +477,12 @@ static bool handle_instr_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
 
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
-    
+
     // TODO: extend more carefully in case we encounter SIB
     extend_reg_with_rex_r(ctx, &mod.reg);
     extend_reg_with_rex_b(ctx, &mod.rm);
 
-    reg_size_t reg_size = (reg_size_t)get_operand_size(ctx);
+    reg_size_t reg_size = get_reg_size(ctx, REG_SIZE_NONE);
     init_reg_operand(&out->ops.binary.src, mod.reg, reg_size);
 
     if (mod.mod == 3) {
@@ -484,7 +490,8 @@ static bool handle_instr_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
         return true;
     }
 
-    return handle_memory_operand(ctx, &mod, &out->ops.binary.dst);
+    return handle_memory_operand(
+        ctx, &mod, &out->ops.binary.dst, (operand_size_t)reg_size);
 }
 
 static void print_operand(const air_operand_t *op, reg_size_t size_hint)
@@ -557,7 +564,7 @@ static void print_instr(const air_instr_t *instr)
             print_operand(op, op->reg.size);
         }
         else if (op->type == OPERAND_MEM) {
-            print_operand(op, REG_SIZE_64);
+            print_operand(op, (reg_size_t)op->mem.op_size);
         }
         printf("\n");
         break;

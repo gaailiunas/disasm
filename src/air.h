@@ -27,6 +27,7 @@ typedef struct {
             scale_factor_t factor;
             int32_t disp;
             addr_size_t size;
+            operand_size_t op_size; // how many bytes does the data occupy
             seg_id_t segment;
         } mem;
         struct {

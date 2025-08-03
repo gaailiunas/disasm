@@ -22,17 +22,23 @@ typedef enum {
 } instr_prefix_flag_t;
 
 typedef enum {
+    REG_SIZE_NONE = -1,
+
     REG_SIZE_16 = 0,
     REG_SIZE_32 = 1,
     REG_SIZE_64 = 2,
 } reg_size_t;
 
 typedef enum {
+    ADDR_SIZE_NONE = -1,
+
     ADDR_SIZE_32 = 1,
     ADDR_SIZE_64 = 2,
 } addr_size_t;
 
 typedef enum {
+    OPERAND_SIZE_NONE = -1,
+
     OPERAND_SIZE_16 = 0,
     OPERAND_SIZE_32 = 1,
     OPERAND_SIZE_64 = 2,

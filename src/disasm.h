@@ -36,7 +36,8 @@ static inline bool check_bounds(const disasm_ctx_t *ctx, size_t needed)
 }
 
 addr_size_t get_addr_size(disasm_ctx_t *ctx);
-operand_size_t get_operand_size(disasm_ctx_t *ctx);
+operand_size_t get_operand_size(disasm_ctx_t *ctx, operand_size_t default_size);
+reg_size_t get_reg_size(disasm_ctx_t *ctx, reg_size_t default_size);
 
 const char *get_reg_name(uint8_t reg, reg_size_t size);
 
