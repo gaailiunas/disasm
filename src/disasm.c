@@ -259,15 +259,57 @@ static int32_t get_disp32(disasm_ctx_t *ctx)
     return disp;
 }
 
-static bool handle_memory_operand(
-    disasm_ctx_t *ctx, struct modrm *mod, air_instr_t *out)
+static bool handle_sib_operand(disasm_ctx_t *ctx, struct modrm *mod,
+    air_operand_t *mem_op, addr_size_t addr_size)
 {
-    operand_size_t op_size = get_operand_size(ctx);
-    addr_size_t addr_size = get_addr_size(ctx);
+    if (!check_bounds(ctx, 1)) {
+        printf("no sib byte\n");
+        return false;
+    }
 
-    // casting for convenience, avoiding a bunch of switch cases
-    reg_size_t reg_op_size = (reg_size_t)op_size;
-    reg_size_t reg_addr_size = (reg_size_t)addr_size;
+    struct sib s;
+    sib_extract(*ctx->current++, &s);
+    extend_reg_with_rex_x(ctx, &s.index);
+    extend_reg_with_rex_b(ctx, &s.base);
+
+    reg_id_t base_reg = s.base;
+    reg_id_t index_reg = (s.index == REG_SP) ? REG_NONE : s.index;
+    int32_t disp = 0;
+
+    if (mod->mod == 0) {
+        if (s.base == REG_BP || s.base == REG_R13) {
+            if (!check_bounds(ctx, 4)) {
+                printf("not enough bytes for 4byte disp\n");
+                return false;
+            }
+
+            disp = get_disp32(ctx);
+            base_reg = REG_NONE;
+        }
+    }
+    else if (mod->mod == 1) {
+        if (!check_bounds(ctx, 1)) {
+            printf("not enough bytes for 1byte disp\n");
+            return false;
+        }
+        disp = get_disp8(ctx);
+    }
+    else if (mod->mod == 2) {
+        if (!check_bounds(ctx, 4)) {
+            printf("not enough bytes for 4byte disp\n");
+            return false;
+        }
+        disp = get_disp32(ctx);
+    }
+    init_mem_operand(
+        mem_op, base_reg, index_reg, s.factor, disp, addr_size, SEG_NONE);
+    return true;
+}
+
+static bool handle_memory_operand(
+    disasm_ctx_t *ctx, struct modrm *mod, air_operand_t *mem_op)
+{
+    addr_size_t addr_size = get_addr_size(ctx);
 
     if (mod->mod == 0) {
         switch (mod->rm) {
@@ -277,48 +319,12 @@ static bool handle_memory_operand(
         case 3:
         case 6:
         case 7: {
-            init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-            init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1,
-                0, addr_size, SEG_NONE);
+            init_mem_operand(
+                mem_op, mod->rm, REG_NONE, FACTOR_1, 0, addr_size, SEG_NONE);
             return true;
         }
         case 4: {
-            if (!check_bounds(ctx, 1)) {
-                printf("no sib byte\n");
-                return false;
-            }
-
-            /* TODO: put it all in a function to handle SIB */
-
-            struct sib s;
-            sib_extract(*ctx->current++, &s);
-            extend_reg_with_rex_x(ctx, &s.index);
-
-            init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-
-            if (s.base == REG_BP || s.base == REG_R13) {
-                if (!check_bounds(ctx, 4)) {
-                    printf("not enough bytes for 4byte disp\n");
-                    return false;
-                }
-
-                int32_t disp = get_disp32(ctx);
-
-                if (s.index == REG_SP) {
-                    init_mem_operand(&out->ops.binary.dst, REG_NONE, REG_NONE,
-                        FACTOR_1, disp, addr_size, SEG_NONE);
-                }
-                else {
-                    init_mem_operand(&out->ops.binary.dst, REG_NONE, s.index,
-                        s.factor, disp, addr_size, SEG_NONE);
-                }
-            }
-            else {
-                init_mem_operand(&out->ops.binary.dst, s.base, s.index,
-                    s.factor, 0, addr_size, SEG_NONE);
-            }
-
-            return true;
+            return handle_sib_operand(ctx, mod, mem_op, addr_size);
         }
         case 5: {
             if (!check_bounds(ctx, 4)) {
@@ -327,13 +333,15 @@ static bool handle_memory_operand(
             }
 
             int32_t disp = get_disp32(ctx);
-
-            init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-            init_mem_operand(&out->ops.binary.dst, REG_IP, REG_NONE, FACTOR_1,
-                disp, addr_size, SEG_NONE);
+            init_mem_operand(
+                mem_op, REG_IP, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
             return true;
         }
         }
+    }
+
+    if (mod->rm == REG_SP) {
+        return handle_sib_operand(ctx, mod, mem_op, addr_size);
     }
 
     int disp_size;
@@ -352,48 +360,19 @@ static bool handle_memory_operand(
         return false;
     }
 
-    init_reg_operand(&out->ops.binary.src, mod->reg, reg_op_size);
-
-    if (mod->rm == REG_SP) {
-        if (!check_bounds(ctx, 1 + disp_size)) {
-            printf("no sib byte or sib+disp\n");
-            return false;
-        }
-
-        struct sib s;
-        sib_extract(*ctx->current++, &s);
-
-        memcpy(&disp, ctx->current, disp_size);
-        ctx->current += disp_size;
-
-        if (disp_size == 1)
-            disp = (int8_t)disp;
-
-        if (s.index == REG_SP) {
-            init_mem_operand(&out->ops.binary.dst, s.base, REG_NONE, FACTOR_1,
-                disp, addr_size, SEG_NONE);
-        }
-        else {
-            init_mem_operand(&out->ops.binary.dst, s.base, s.index, s.factor,
-                disp, addr_size, SEG_NONE);
-        }
-    }
-    else {
-        if (!check_bounds(ctx, disp_size)) {
-            printf("not enough bytes for disp\n");
-            return false;
-        }
-
-        memcpy(&disp, ctx->current, disp_size);
-        ctx->current += disp_size;
-
-        if (disp_size == 1)
-            disp = (int8_t)disp;
-
-        init_mem_operand(&out->ops.binary.dst, mod->rm, REG_NONE, FACTOR_1,
-            disp, addr_size, SEG_NONE);
+    if (!check_bounds(ctx, disp_size)) {
+        printf("not enough bytes for disp\n");
+        return false;
     }
 
+    memcpy(&disp, ctx->current, disp_size);
+    ctx->current += disp_size;
+
+    if (disp_size == 1)
+        disp = (int8_t)disp;
+
+    init_mem_operand(
+        mem_op, mod->rm, REG_NONE, FACTOR_1, disp, addr_size, SEG_NONE);
     return true;
 }
 
@@ -466,10 +445,7 @@ static bool handle_instr_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
     modrm_extract(*ctx->current++, &mod);
     extend_reg_with_rex_b(ctx, &mod.rm);
     out->type = AIR_POP;
-    reg_size_t reg_size =
-        HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP) ? REG_SIZE_16 : REG_SIZE_64;
-    init_reg_operand(&out->ops.unary.operand, mod.rm, reg_size);
-    return handle_memory_operand(ctx, &mod, out);
+    return handle_memory_operand(ctx, &mod, &out->ops.unary.operand);
 }
 
 static bool handle_instr_push_reg(
@@ -495,20 +471,20 @@ static bool handle_instr_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
 
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
-
+    
+    // TODO: extend more carefully in case we encounter SIB
     extend_reg_with_rex_r(ctx, &mod.reg);
     extend_reg_with_rex_b(ctx, &mod.rm);
 
-    if (mod.mod == 3) {
-        operand_size_t op_size = get_operand_size(ctx);
-        reg_size_t reg_size = (reg_size_t)op_size;
+    reg_size_t reg_size = (reg_size_t)get_operand_size(ctx);
+    init_reg_operand(&out->ops.binary.src, mod.reg, reg_size);
 
-        init_reg_operand(&out->ops.binary.src, mod.reg, reg_size);
+    if (mod.mod == 3) {
         init_reg_operand(&out->ops.binary.dst, mod.rm, reg_size);
         return true;
     }
 
-    return handle_memory_operand(ctx, &mod, out);
+    return handle_memory_operand(ctx, &mod, &out->ops.binary.dst);
 }
 
 static void print_operand(const air_operand_t *op, reg_size_t size_hint)
