@@ -326,6 +326,8 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod,
         case 3:
         case 6:
         case 7: {
+            extend_reg_with_rex_r(ctx, &mod->reg);
+            extend_reg_with_rex_b(ctx, &mod->rm);
             init_mem_operand(mem_op, mod->rm, REG_NONE, FACTOR_1, 0, addr_size,
                 SEG_NONE, op_size);
             return true;
@@ -339,6 +341,9 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod,
                 return false;
             }
 
+            extend_reg_with_rex_r(ctx, &mod->reg);
+            extend_reg_with_rex_b(ctx, &mod->rm);
+
             int32_t disp = get_disp32(ctx);
             init_mem_operand(mem_op, REG_IP, REG_NONE, FACTOR_1, disp,
                 addr_size, SEG_NONE, op_size);
@@ -350,6 +355,9 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod,
     if (mod->rm == REG_SP) {
         return handle_sib_operand(ctx, mod, mem_op, addr_size, op_size);
     }
+
+    extend_reg_with_rex_r(ctx, &mod->reg);
+    extend_reg_with_rex_b(ctx, &mod->rm);
 
     int disp_size;
     int32_t disp = 0;
@@ -449,7 +457,6 @@ static bool handle_instr_pop_rm(disasm_ctx_t *ctx, air_instr_t *out)
     }
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
-    extend_reg_with_rex_b(ctx, &mod.rm);
     out->type = AIR_POP;
     return handle_memory_operand(ctx, &mod, &out->ops.unary.operand,
         get_operand_size(ctx, OPERAND_SIZE_64));
@@ -477,15 +484,13 @@ static bool handle_instr_mov_rm_r(disasm_ctx_t *ctx, air_instr_t *out)
 
     struct modrm mod;
     modrm_extract(*ctx->current++, &mod);
-
-    // TODO: extend more carefully in case we encounter SIB
     extend_reg_with_rex_r(ctx, &mod.reg);
-    extend_reg_with_rex_b(ctx, &mod.rm);
 
     reg_size_t reg_size = get_reg_size(ctx, REG_SIZE_NONE);
     init_reg_operand(&out->ops.binary.src, mod.reg, reg_size);
 
     if (mod.mod == 3) {
+        extend_reg_with_rex_b(ctx, &mod.rm);
         init_reg_operand(&out->ops.binary.dst, mod.rm, reg_size);
         return true;
     }
