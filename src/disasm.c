@@ -17,10 +17,12 @@ addr_size_t get_addr_size(disasm_ctx_t *ctx)
 
 operand_size_t get_operand_size(disasm_ctx_t *ctx, operand_size_t default_size)
 {
-    if (ctx->has_rex && ctx->rex.w)
+    if (ctx->has_rex && ctx->rex.w) {
         return OPERAND_SIZE_64;
-    if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP))
+    }
+    if (HAS_FLAG(ctx->prefixes, INSTR_PREFIX_OP)) {
         return OPERAND_SIZE_16;
+    }
     return default_size == OPERAND_SIZE_NONE ? OPERAND_SIZE_32 : default_size;
 }
 
@@ -32,22 +34,25 @@ reg_size_t get_reg_size(disasm_ctx_t *ctx, reg_size_t default_size)
 // extend register with REX.R bit (ModR/M.reg field)
 static inline void extend_reg_with_rex_r(disasm_ctx_t *ctx, uint8_t *reg)
 {
-    if (ctx->has_rex && ctx->rex.r)
+    if (ctx->has_rex && ctx->rex.r) {
         *reg += 8;
+    }
 }
 
 // extend register with REX.B bit (ModR/M.rm field)
 static inline void extend_reg_with_rex_b(disasm_ctx_t *ctx, uint8_t *reg)
 {
-    if (ctx->has_rex && ctx->rex.b)
+    if (ctx->has_rex && ctx->rex.b) {
         *reg += 8;
+    }
 }
 
 // extend register with REX.X bit (SIB.index field)
 static inline void extend_reg_with_rex_x(disasm_ctx_t *ctx, uint8_t *reg)
 {
-    if (ctx->has_rex && ctx->rex.x)
+    if (ctx->has_rex && ctx->rex.x) {
         *reg += 8;
+    }
 }
 
 void disasm_parse_prefixes(disasm_ctx_t *ctx)
@@ -287,8 +292,9 @@ static bool handle_memory_operand(disasm_ctx_t *ctx, struct modrm *mod,
     memcpy(&disp, ctx->current, disp_size);
     ctx->current += disp_size;
 
-    if (disp_size == 1)
+    if (disp_size == 1) {
         disp = (int8_t)disp;
+    }
 
     init_mem_operand(mem_op, mod->rm, REG_NONE, FACTOR_1, disp, addr_size,
         SEG_NONE, op_size);
@@ -413,8 +419,9 @@ void disasm(const uint8_t *instructions, size_t len, air_instr_list_t *out)
     while (ctx.current < ctx.end) {
         const uint8_t *instr_start = ctx.current;
         disasm_parse_prefixes(&ctx);
-        if (ctx.current >= ctx.end)
+        if (ctx.current >= ctx.end) {
             break;
+        }
 
         uint8_t opcode = *ctx.current++;
         instr_type_t type = opcode_table[opcode];

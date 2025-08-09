@@ -58,15 +58,17 @@ const char *get_reg_name(uint8_t reg, reg_size_t size)
 
 const char *get_op_size_suffix(operand_size_t size)
 {
-    if (size > OPERAND_SIZE_64)
+    if (size > OPERAND_SIZE_64) {
         return "unk_size";
+    }
     return op_size_suffixes[size];
 }
 
 const char *get_segment_name(seg_id_t id)
 {
-    if (id > SEG_GS)
+    if (id > SEG_GS) {
         return "unk";
+    }
     return segment_names[id];
 }
 
@@ -95,8 +97,9 @@ void print_operand(const air_operand_t *op, reg_size_t size_hint)
         }
 
         if (op->mem.index != REG_NONE) {
-            if (need_plus)
+            if (need_plus) {
                 printf("+");
+            }
             printf("%s*%d",
                 get_reg_name(op->mem.index, (reg_size_t)op->mem.size),
                 op->mem.factor);
@@ -111,8 +114,9 @@ void print_operand(const air_operand_t *op, reg_size_t size_hint)
                 printf("-%#x", -disp);
             }
             else {
-                if (need_plus)
+                if (need_plus) {
                     printf("+");
+                }
                 printf("%#x", disp);
             }
         }

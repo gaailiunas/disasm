@@ -1,4 +1,5 @@
 #include "air.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,8 +14,9 @@ void air_instr_list_init(air_instr_list_t *list)
 air_instr_list_t *air_instr_list_new()
 {
     air_instr_list_t *list = (air_instr_list_t *)malloc(sizeof(*list));
-    if (list)
+    if (list) {
         air_instr_list_init(list);
+    }
     return list;
 }
 
