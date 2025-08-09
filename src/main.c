@@ -98,17 +98,21 @@ int main(void)
         0xc3  // ret
     };
 
-    air_instr_list_t instr_list = {0};
+    air_instr_list_t instr_list;
+    air_instr_list_init(&instr_list);
+
     disasm(instructions, sizeof(instructions), &instr_list);
 
-    // TODO: a function that would return the next node while freeing the previous one
-    air_instr_t *node = instr_list.head;
-    while (node) {
-        air_instr_t *next = node->next;
-        print_instr(node);
-
-        free(node);
-        node = next;
+    air_instr_chunk_t *chunk = instr_list.head;
+    while (chunk) {
+        size_t max = chunk == instr_list.tail ? instr_list.used_in_tail
+                                              : AIR_CHUNK_CAPACITY;
+        for (size_t i = 0; i < max; i++) {
+            print_instr(&chunk->items[i]);
+        }
+        air_instr_chunk_t *next = chunk->next;
+        free(chunk);
+        chunk = next;
     }
 
     return 0;

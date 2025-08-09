@@ -410,23 +410,20 @@ void disasm(const uint8_t *instructions, size_t len, air_instr_list_t *out)
     ctx.current = instructions;
     ctx.end = instructions + len;
 
-    // TODO: arena allocator or a dynamic growing array
-    air_instr_t *instr = (air_instr_t *)malloc(sizeof(*instr));
-    if (!instr) {
-        printf("failed to allocate instr\n");
-        return;
-    }
-
     while (ctx.current < ctx.end) {
         const uint8_t *instr_start = ctx.current;
         disasm_parse_prefixes(&ctx);
         if (ctx.current >= ctx.end)
             break;
 
-        memset(instr, 0, sizeof(*instr));
-
         uint8_t opcode = *ctx.current++;
         instr_type_t type = opcode_table[opcode];
+
+        air_instr_t *instr = air_instr_list_get_new(out);
+        if (!instr) {
+            printf("out of memory\n");
+            break;
+        }
 
         bool ok = true;
 
@@ -460,17 +457,12 @@ void disasm(const uint8_t *instructions, size_t len, air_instr_list_t *out)
 
         if (ok) {
             instr->length = ctx.current - instr_start;
-            air_instr_list_add(out, instr);
-            instr = (air_instr_t *)malloc(sizeof(*instr));
-            if (!instr) {
-                printf("failed to allocate instr\n");
-                break;
-            }
         }
-        reset_ctx(&ctx);
-    }
+        else {
+            out->count--;
+            out->used_in_tail--;
+        }
 
-    if (instr) {
-        free(instr);
+        reset_ctx(&ctx);
     }
 }

@@ -60,15 +60,26 @@ typedef struct air_instr_s {
     struct air_instr_s *next;
 } air_instr_t;
 
+#define AIR_CHUNK_CAPACITY 128
+
+typedef struct air_instr_chunk_s {
+    air_instr_t items[AIR_CHUNK_CAPACITY];
+    struct air_instr_chunk_s *next;
+} air_instr_chunk_t;
+
 typedef struct {
-    air_instr_t *head;
-    air_instr_t *tail;
+    air_instr_chunk_t *head;
+    air_instr_chunk_t *tail;
     size_t count;
+    size_t used_in_tail;
 } air_instr_list_t;
 
+void air_instr_list_init(air_instr_list_t *);
 air_instr_list_t *air_instr_list_new();
+
+void air_instr_list_destroy(air_instr_list_t *);
 void air_instr_list_free(air_instr_list_t *);
 
-void air_instr_list_add(air_instr_list_t *, air_instr_t *);
+air_instr_t *air_instr_list_get_new(air_instr_list_t *);
 
 #endif // AIR_H
