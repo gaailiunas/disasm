@@ -2,40 +2,12 @@
 #include "air.h"
 #include "defs.h"
 #include "modrm.h"
+#include "optable.h"
 #include "prefix.h"
 #include "sib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-const uint8_t instruction_types[256] = {
-    [0x07] = INSTR_POP_SEG,
-    [0x0F] = INSTR_POP_SEG, // 2byte
-    [0x17] = INSTR_POP_SEG,
-    [0x1F] = INSTR_POP_SEG,
-
-    [0x50] = INSTR_PUSH_REG,
-    [0x51] = INSTR_PUSH_REG,
-    [0x52] = INSTR_PUSH_REG,
-    [0x53] = INSTR_PUSH_REG,
-    [0x54] = INSTR_PUSH_REG,
-    [0x55] = INSTR_PUSH_REG,
-    [0x56] = INSTR_PUSH_REG,
-    [0x57] = INSTR_PUSH_REG,
-
-    [0x58] = INSTR_POP_REG,
-    [0x59] = INSTR_POP_REG,
-    [0x5A] = INSTR_POP_REG,
-    [0x5B] = INSTR_POP_REG,
-    [0x5C] = INSTR_POP_REG,
-    [0x5D] = INSTR_POP_REG,
-    [0x5E] = INSTR_POP_REG,
-    [0x5F] = INSTR_POP_REG,
-
-    [0x89] = INSTR_MOV_RM_R,
-
-    [0x8F] = INSTR_POP_RM,
-};
 
 addr_size_t get_addr_size(disasm_ctx_t *ctx)
 {
@@ -454,7 +426,7 @@ void disasm(const uint8_t *instructions, size_t len, air_instr_list_t *out)
         memset(instr, 0, sizeof(*instr));
 
         uint8_t opcode = *ctx.current++;
-        instr_type_t type = instruction_types[opcode];
+        instr_type_t type = opcode_table[opcode];
 
         bool ok = true;
 

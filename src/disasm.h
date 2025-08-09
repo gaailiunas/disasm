@@ -19,8 +19,6 @@ typedef struct {
     uint16_t prefixes;
 } disasm_ctx_t;
 
-extern const uint8_t instruction_types[256];
-
 static inline bool check_bounds(const disasm_ctx_t *ctx, size_t needed)
 {
     return (ctx->current + needed) < ctx->end;

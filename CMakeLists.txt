@@ -8,4 +8,5 @@ add_executable(disasm
     src/sib.c
     src/air.c
     src/frontend.c
+    src/optable.c
 )
