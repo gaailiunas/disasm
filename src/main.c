@@ -1,4 +1,7 @@
+#include "air.h"
 #include "disasm.h"
+#include "frontend.h"
+#include <stdlib.h>
 
 int main(void)
 {
@@ -95,6 +98,18 @@ int main(void)
         0xc3  // ret
     };
 
-    disasm(instructions, sizeof(instructions));
+    air_instr_list_t instr_list = {0};
+    disasm(instructions, sizeof(instructions), &instr_list);
+
+    // TODO: a function that would return the next node while freeing the previous one
+    air_instr_t *node = instr_list.head;
+    while (node) {
+        air_instr_t *next = node->next;
+        print_instr(node);
+
+        free(node);
+        node = next;
+    }
+
     return 0;
 }

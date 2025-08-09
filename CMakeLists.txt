@@ -7,4 +7,5 @@ add_executable(disasm
     src/modrm.c
     src/sib.c
     src/air.c
+    src/frontend.c
 )
