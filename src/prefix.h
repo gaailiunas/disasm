@@ -31,6 +31,13 @@ struct rex_prefix {
     bool b;
 };
 
+struct modrm {
+    uint8_t mod;
+    uint8_t reg;
+    uint8_t rm;
+};
+
 bool rex_extract(uint8_t prefix, struct rex_prefix *out);
+void modrm_extract(uint8_t modrm, struct modrm *out);
 
 #endif // PREFIX_H

@@ -1,5 +1,4 @@
 #include "meta.h"
-#include "../../modrm.h"
 #include "optable.h"
 #include <stdio.h>
 #include <string.h>
