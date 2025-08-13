@@ -1,4 +1,5 @@
 #include "air.h"
+#include "arch.h"
 #include "disasm.h"
 #include "frontend.h"
 #include <stdlib.h>
@@ -101,7 +102,7 @@ int main(void)
     air_instr_list_t instr_list;
     air_instr_list_init(&instr_list);
 
-    disasm(instructions, sizeof(instructions), &instr_list);
+    disasm(instructions, sizeof(instructions), ARCH_X86_64, &instr_list);
 
     air_instr_chunk_t *chunk = instr_list.head;
     while (chunk) {

@@ -45,16 +45,6 @@ typedef enum {
 } operand_size_t;
 
 typedef enum {
-    INSTR_PUSH_REG = 1,
-    INSTR_POP_REG,
-    INSTR_POP_SEG,
-    INSTR_POP_RM,
-    INSTR_MOV_RM_R,
-
-    INSTR_NONE = 0xff,
-} instr_type_t;
-
-typedef enum {
     REG_AX,
     REG_CX,
     REG_DX,

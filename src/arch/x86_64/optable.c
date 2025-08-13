@@ -1,5 +1,4 @@
 #include "optable.h"
-#include "defs.h"
 
 const uint8_t opcode_table[256] = {
     [0x07] = INSTR_POP_SEG,
